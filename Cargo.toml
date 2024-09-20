@@ -1,0 +1,20 @@
+[package]
+name = "microservice-package-manager"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = "1.0.196"
+serde_derive = "1.0.196"
+serde_json = "1.0.113"
+clap = { version = "4.4.6", features = ["derive"] }
+custom-logger = { git = "https://github.com/lmzuccarelli/rust-custom-logger", branch = "main", version = "0.1.4" }
+mirror-error = { git = "https://github.com/lmzuccarelli/rust-mirror-error", branch = "main", version = "0.1.0" }
+mirror-utils = { git = "https://github.com/lmzuccarelli/rust-mirror-utils", branch = "main", version = "0.3.0" }
+tokio = { version = "1.40.0", features = ["full"] }
+serde_yaml = "0.9.34"
+tar = "0.4.41"
+flate2 = "1.0.33"
+sha256 = "1.5.0"
+openssl = "0.10.66"
+
