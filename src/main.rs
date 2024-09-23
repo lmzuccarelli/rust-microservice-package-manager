@@ -1,11 +1,11 @@
 use crate::api::schema::*;
 use crate::config::read::*;
-use crate::package::build::*;
+use crate::package::create::*;
 use clap::Parser;
 use custom_logger::*;
 use mirror_error::MirrorError;
 use mirror_utils::fs_handler;
-use package::signing::{create_keypair, sign_artifact, verify_artifact};
+use package::signature::{create_keypair, sign_artifact, verify_artifact};
 use std::process;
 
 mod api;
@@ -35,20 +35,69 @@ async fn main() -> Result<(), MirrorError> {
             fs_handler(format!("{}/generated", working_dir), "create_dir", None).await?;
             let config = load_config(config_file.to_string()).await?;
             let sc = parse_yaml_config(config)?;
-            log.info(&format!("working-dir {}", working_dir));
-            log.info(&format!("Microservices struct {:#?}", sc));
+            log.debug(&format!("working-dir {}", working_dir));
+            log.debug(&format!("microservices struct {:#?}", sc));
             for service in sc.spec.services.iter() {
-                create_tar_gz(service.name.clone(), service.project.clone()).await?;
+                let res =
+                    create_signed_artifact(service.name.clone(), service.project.clone()).await;
+                if res.is_err() {
+                    log.error(&format!(
+                        "{}",
+                        res.as_ref().err().unwrap().to_string().to_ascii_lowercase()
+                    ));
+                } else {
+                    log.info(&format!("artifacts created in generated/{}", service.name));
+                    log.info(&format!("completed packaging for {}", service.name));
+                }
+            }
+        }
+        Some(Commands::CreateManifest {
+            name,
+            referral_url_digest,
+            referral_size,
+        }) => {
+            let res = create_referral_manifest(
+                name.to_string(),
+                referral_url_digest.to_string(),
+                *referral_size,
+            )
+            .await;
+            if res.is_err() {
+                log.error(&format!(
+                    "{}",
+                    res.as_ref().err().unwrap().to_string().to_ascii_lowercase()
+                ));
+            } else {
+                log.info(&format!("created signed manifest for {}", name));
             }
         }
         Some(Commands::Keypair {}) => {
             create_keypair().await?;
         }
         Some(Commands::Sign { artifact }) => {
-            sign_artifact(artifact.to_string()).await?;
+            let name = artifact.split("/").last().unwrap();
+            let res = sign_artifact(name.to_string(), artifact.to_string()).await;
+            if res.is_err() {
+                log.error(&format!(
+                    "{:#?}",
+                    res.err().as_ref().unwrap().to_string().to_lowercase()
+                ));
+            }
+            log.info(&format!("artifact {} successfully signed", name));
         }
         Some(Commands::Verify { artifact }) => {
-            verify_artifact(artifact.to_string()).await?;
+            let name = artifact.split("/").last().unwrap();
+            let res = verify_artifact(name.to_string(), artifact.to_string()).await;
+            if res.is_err() {
+                log.error(&format!(
+                    "{:#?}",
+                    res.as_ref().err().unwrap().to_string().to_lowercase()
+                ));
+            }
+            match res.as_ref().unwrap() {
+                true => log.info(&format!("artifact {} is trusted", name)),
+                false => log.warn(&format!("artitact {} is not trusted", name)),
+            }
         }
         None => {
             log.error("sub command not recognized");

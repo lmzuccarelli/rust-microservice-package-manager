@@ -40,30 +40,48 @@ pub async fn create_keypair() -> Result<(), MirrorError> {
     Ok(())
 }
 
-pub async fn sign_artifact(file: String) -> Result<(), MirrorError> {
-    let mut tar_buf = vec![];
-    let mut tgz_file = File::open(file.clone()).unwrap();
-    let res_r = tgz_file.read_to_end(&mut tar_buf);
+pub async fn sign_artifact(name: String, file: String) -> Result<(), MirrorError> {
+    let mut artifact_buf = vec![];
+    let res_file = File::open(file.clone());
+    if res_file.is_err() {
+        let err = MirrorError::new(&format!(
+            "opening artifact file {}",
+            res_file.err().unwrap().to_string().to_lowercase()
+        ));
+        return Err(err);
+    }
+    let res_r = res_file.unwrap().read_to_end(&mut artifact_buf);
     if res_r.is_err() {
         let err = MirrorError::new(&format!(
-            "signing file {}",
+            "reading artifact file {}",
             res_r.err().unwrap().to_string().to_lowercase()
         ));
         return Err(err);
     }
-
-    let mut f_prv = File::open(".ssh/private.pem").unwrap();
+    let res_prv = File::open(".ssh/private.pem");
+    if res_prv.is_err() {
+        let err = MirrorError::new(&format!(
+            "opening private key {}",
+            res_r.err().unwrap().to_string().to_lowercase()
+        ));
+        return Err(err);
+    }
     let mut buf = vec![];
-    f_prv
-        .read_to_end(&mut buf)
-        .expect("should read private key");
+    let res_r = res_prv.unwrap().read_to_end(&mut buf);
+    if res_r.is_err() {
+        let err = MirrorError::new(&format!(
+            "reading private key {}",
+            res_r.err().unwrap().to_string().to_lowercase()
+        ));
+        return Err(err);
+    }
     let public_key = PKey::private_key_from_pem(&buf);
 
     // Sign the data
     let mut signer = Signer::new(MessageDigest::sha256(), &public_key.unwrap()).unwrap();
-    signer.update(&tar_buf).unwrap();
+    signer.update(&artifact_buf).unwrap();
     let mut f_sign = File::create(file.clone() + &".signed").expect("should create signed file");
-    let res_sign = f_sign.write_all(&tar_buf);
+    let res_sign = f_sign.write_all(&artifact_buf);
     if res_sign.is_err() {
         let err = MirrorError::new(&format!(
             "writing signed artifact {}",
@@ -72,8 +90,15 @@ pub async fn sign_artifact(file: String) -> Result<(), MirrorError> {
         return Err(err);
     }
     let signature = signer.sign_to_vec().unwrap();
-    let mut f_signature = File::create(".ssh/signature").expect("should create signature file");
-    let res_sig = f_signature.write_all(&signature);
+    let res_signature = File::create(format!(".ssh/{}-signature", name));
+    if res_signature.is_err() {
+        let err = MirrorError::new(&format!(
+            "creating signature {}",
+            res_signature.err().unwrap().to_string().to_lowercase()
+        ));
+        return Err(err);
+    }
+    let res_sig = res_signature.unwrap().write_all(&signature);
     if res_sig.is_err() {
         let err = MirrorError::new(&format!(
             "writing signature artifact {}",
@@ -84,7 +109,7 @@ pub async fn sign_artifact(file: String) -> Result<(), MirrorError> {
     Ok(())
 }
 
-pub async fn verify_artifact(file: String) -> Result<(), MirrorError> {
+pub async fn verify_artifact(name: String, file: String) -> Result<bool, MirrorError> {
     // Verify the data
     let mut tar_buf = vec![];
     let mut tgz_file = File::open(file.clone()).unwrap();
@@ -101,20 +126,22 @@ pub async fn verify_artifact(file: String) -> Result<(), MirrorError> {
     let mut buf = vec![];
     f_prv.read_to_end(&mut buf).expect("should read public key");
     let public_key = PKey::public_key_from_pem(&buf);
-    let mut f_signature = File::open(".ssh/signature").unwrap();
+    let res_sig = File::open(format!(".ssh/{}-signature", name));
+    if res_sig.is_err() {
+        return Ok(false);
+    }
     let mut signature_buf = vec![];
-    f_signature
-        .read_to_end(&mut signature_buf)
-        .expect("should read signature");
-
+    let res = res_sig.unwrap().read_to_end(&mut signature_buf);
+    if res.is_err() {
+        let err = MirrorError::new(&format!(
+            "reading to buffer {}",
+            res.err().unwrap().to_string().to_lowercase()
+        ));
+        return Err(err);
+    }
     let mut verifier =
         Verifier::new(MessageDigest::sha256(), &public_key.as_ref().unwrap()).unwrap();
     verifier.update(&tar_buf).unwrap();
     let res = verifier.verify(&signature_buf).unwrap();
-    if res {
-        println!("The artifact {} is trusted", file);
-    } else {
-        println!("The artifact {} is not trusted", file);
-    }
-    Ok(())
+    Ok(res)
 }

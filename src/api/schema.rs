@@ -42,6 +42,26 @@ pub enum Commands {
         )]
         working_dir: String,
     },
+    /// SignedManifest subcommand (to build signed artifact manifests)
+    CreateManifest {
+        #[arg(short, long, value_name = "name", help = "Component name (required)")]
+        name: String,
+        #[arg(
+            short,
+            long,
+            value_name = "referral-url-digest",
+            help = "The referral url with digest (required)"
+        )]
+        referral_url_digest: String,
+        #[arg(
+            short,
+            long,
+            value_name = "referral_size",
+            help = "The referral manifest size (required)"
+        )]
+        referral_size: i64,
+    },
+
     /// Keypair (create PEM keypair)
     Keypair {},
     /// Sign
@@ -153,7 +173,7 @@ pub struct Rootfs {
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OCIIndex {
-    pub schema_version: String,
+    pub schema_version: i64,
     pub manifests: Vec<Layer>,
 }
 
@@ -216,11 +236,21 @@ pub struct ManifestPlatform {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Annotations {
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(rename = "org.opencontainers.image.title")]
-    pub image_title: String,
+    pub image_title: Option<String>,
 
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(rename = "org.opencontainers.image.created")]
-    pub image_created: String,
+    pub image_created: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct SignatureJson {
+    #[serde(rename = "artitact")]
+    pub artifact: String,
+    #[serde(rename = "signature")]
+    pub signature: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
