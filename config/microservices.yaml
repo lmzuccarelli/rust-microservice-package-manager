@@ -1,9 +1,9 @@
-apiVersion: microservices.appliaction.io/v1alpha1
+apiVersion: microservices.application.io/v1alpha1
 kind: MicroserviceConfig
 spec:
   services:
     - name: convey
-      project: /home/lzuccarelli/Projects/convey/target/release
+      binaryPath: /home/lzuccarelli/Projects/convey/target/release
       registry: localhost:5000/test/convey:v0.1.0
       version: 0.1.1
       authors: 
@@ -16,5 +16,12 @@ spec:
       args:
         - name: "--config"
           value: "lb-setup.toml"
-
+    - name: hypertls-microservice
+      binaryPath: /home/lzuccarelli/Projects/rust-hypertls-microservice/target/release
+      registry: localhost:5000/test/hyepertls-microservice:v0.1.0
+      version: 0.1.1
+      authors: 
+        - lmzuccarelli luzuccar@redhat.com
+        - mtroisi hello@marcotroisi.com
+      description: "Simple demo of a microservice binary to signed package"
 

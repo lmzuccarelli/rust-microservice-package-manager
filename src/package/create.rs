@@ -16,7 +16,15 @@ pub async fn create_signed_artifact(name: String, path: String) -> Result<(), Mi
     let tar = File::create(tar_gz_file.clone()).unwrap();
     let enc = GzEncoder::new(tar, Compression::default());
     let mut tar_file = tar::Builder::new(enc);
-    let mut binary = File::open(format!("{}/{}", path, name.clone())).unwrap();
+    let res_binary = File::open(format!("{}/{}", path, name.clone()));
+    if res_binary.is_err() {
+        let err = MirrorError::new(&format!(
+            "reading binary microservice (maybe needs to be compiled ?) {}",
+            res_binary.err().unwrap().to_string().to_lowercase()
+        ));
+        return Err(err);
+    }
+    let mut binary = res_binary.unwrap();
     tar_file.append_file(name.clone(), &mut binary).unwrap();
     tar_file.finish().expect("should flush tar contents");
     let mut buf = vec![];

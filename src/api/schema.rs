@@ -302,10 +302,10 @@ pub struct Service {
     #[serde(rename = "name")]
     pub name: String,
 
-    /// project is the path to the actual microservice project on disk
+    /// binary_path is the path to the actual microservice project on disk
     /// and the link to the binary
-    #[serde(rename = "project")]
-    pub project: String,
+    #[serde(rename = "binaryPath")]
+    pub binary_path: String,
 
     /// registry is the oci registry to pull the image from
     #[serde(rename = "registry")]

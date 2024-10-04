@@ -43,13 +43,27 @@ async fn main() -> Result<(), MirrorError> {
             log.debug(&format!("working-dir {}", working_dir));
             log.debug(&format!("microservices struct {:#?}", sc));
             for service in sc.spec.services.iter() {
-                let res =
-                    create_signed_artifact(service.name.clone(), service.project.clone()).await;
+                // first sign each artifact
+                let res = sign_artifact(
+                    service.name.clone(),
+                    format!("{}/{}", service.binary_path.clone(), service.name.clone()),
+                )
+                .await;
                 if res.is_err() {
                     log.error(&format!(
-                        "{}",
+                        "[package] signing binary {:#?}",
+                        res.err().as_ref().unwrap().to_string().to_lowercase()
+                    ));
+                    process::exit(1);
+                }
+                let res =
+                    create_signed_artifact(service.name.clone(), service.binary_path.clone()).await;
+                if res.is_err() {
+                    log.error(&format!(
+                        "[package] creating package {}",
                         res.as_ref().err().unwrap().to_string().to_ascii_lowercase()
                     ));
+                    process::exit(1);
                 } else {
                     log.info(&format!(
                         "artifacts created in folder generated/{}",
@@ -193,6 +207,7 @@ async fn main() -> Result<(), MirrorError> {
         }
         Some(Commands::Keypair {}) => {
             create_keypair().await?;
+            log.ex("keypair successfully created")
         }
         Some(Commands::Sign { artifact }) => {
             let name = artifact.split("/").last().unwrap();
