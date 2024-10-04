@@ -25,7 +25,7 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Commands {
-    /// Package subcommand (lists operators in a catalog)
+    /// Package subcommand (package a signed binary in oci image format)
     Package {
         #[arg(
             short,
@@ -42,8 +42,26 @@ pub enum Commands {
         )]
         working_dir: String,
     },
-    /// SignedManifest subcommand (to build signed artifact manifests)
-    CreateManifest {
+    /// Stage subcommand (used to pull oci images from a registry and verify binaries are signed)
+    Stage {
+        #[arg(
+            short,
+            long,
+            value_name = "config-file",
+            help = "The config file used to package and sign microservice binaries (required)"
+        )]
+        config_file: String,
+        #[arg(
+            short,
+            long,
+            value_name = "working-dir",
+            help = "The base working directory to hold the untarred binary files (required)"
+        )]
+        working_dir: String,
+    },
+
+    /// CreateReferralManifest subcommand (to build signed artifact manifests)
+    CreateReferralManifest {
         #[arg(short, long, value_name = "name", help = "Component name (required)")]
         name: String,
         #[arg(
@@ -56,10 +74,17 @@ pub enum Commands {
         #[arg(
             short,
             long,
-            value_name = "referral_size",
+            value_name = "referral-size",
             help = "The referral manifest size (required)"
         )]
         referral_size: i64,
+        #[arg(
+            short,
+            long,
+            value_enum,
+            help = "The image format oci or dockerv2 (required)"
+        )]
+        format: String,
     },
 
     /// Keypair (create PEM keypair)
@@ -282,6 +307,10 @@ pub struct Service {
     #[serde(rename = "project")]
     pub project: String,
 
+    /// registry is the oci registry to pull the image from
+    #[serde(rename = "registry")]
+    pub registry: String,
+
     #[serde(rename = "version")]
     pub version: String,
 
@@ -305,4 +334,11 @@ pub struct KeyValue {
 
     #[serde(rename = "value")]
     pub value: String,
+}
+
+#[allow(unused)]
+#[derive(Debug, Clone)]
+pub enum Imageformat {
+    OCI,
+    DOCKERV2,
 }

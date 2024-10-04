@@ -4,6 +4,7 @@ spec:
   services:
     - name: convey
       project: /home/lzuccarelli/Projects/convey/target/release
+      registry: localhost:5000/test/convey:v0.1.0
       version: 0.1.1
       authors: 
         - lmzuccarelli luzuccar@redhat.com
@@ -15,4 +16,5 @@ spec:
       args:
         - name: "--config"
           value: "lb-setup.toml"
+
 

@@ -10,14 +10,15 @@ use std::fs;
 use std::fs::File;
 use std::io::Read;
 
-// first pick up the binar file and create a tar.gz
+// first pick up the binary file and create a tar.gz
 pub async fn create_signed_artifact(name: String, path: String) -> Result<(), MirrorError> {
     let tar_gz_file = format!("generated/{}.tar.gz", name.clone());
     let tar = File::create(tar_gz_file.clone()).unwrap();
     let enc = GzEncoder::new(tar, Compression::default());
-    let mut a = tar::Builder::new(enc);
+    let mut tar_file = tar::Builder::new(enc);
     let mut binary = File::open(format!("{}/{}", path, name.clone())).unwrap();
-    a.append_file(name.clone(), &mut binary).unwrap();
+    tar_file.append_file(name.clone(), &mut binary).unwrap();
+    tar_file.finish().expect("should flush tar contents");
     let mut buf = vec![];
     let mut tgz_file = File::open(tar_gz_file.clone()).unwrap();
     let res_r = tgz_file.read_to_end(&mut buf);
@@ -31,18 +32,14 @@ pub async fn create_signed_artifact(name: String, path: String) -> Result<(), Mi
     let hash = digest(&buf);
     let blobs_path = format!("generated/{}/blobs/sha256", name.clone());
     fs_handler(blobs_path.clone(), "create_dir", None).await?;
-    let res_w = fs::write(
-        format!("generated/{}/blobs/sha256/{}", name, hash),
-        buf.clone(),
-    );
-    if res_w.is_err() {
+    let rename = fs::rename(tar_gz_file, format!("{}/{}", blobs_path.clone(), hash));
+    if rename.is_err() {
         let err = MirrorError::new(&format!(
-            "writing blob {}",
-            res_w.err().unwrap().to_string().to_lowercase()
+            "renaming file to blob {}",
+            rename.err().unwrap().to_string().to_lowercase()
         ));
         return Err(err);
     }
-    fs_handler(tar_gz_file, "remove_file", None).await?;
     create_oci_manifest(name.clone(), hash, buf.len()).await?;
     Ok(())
 }
@@ -115,8 +112,18 @@ pub async fn create_referral_manifest(
     name: String,
     referral_url_digest: String,
     referral_size: i64,
+    format: String,
 ) -> Result<(), MirrorError> {
-    fs_handler(format!("generated/{}/signature", name), "create_dir", None).await?;
+    if format == "dockerv2" {
+        fs_handler(format!("generated/{}/signature", name), "create_dir", None).await?;
+    } else {
+        fs_handler(
+            format!("generated/{}/signature/blobs/sha256", name),
+            "create_dir",
+            None,
+        )
+        .await?;
+    }
     let mut artifact_buf = vec![];
     let res_file = File::open(format!(".ssh/{}-signature", name.clone()));
     if res_file.is_err() {
@@ -142,12 +149,24 @@ pub async fn create_referral_manifest(
     };
     let sig_json_contents = serde_json::to_string(&sig_json).unwrap();
     let hash_sig_json = digest(&sig_json_contents.clone());
-    fs_handler(
-        format!("generated/{}/signature/{}", name, hash_sig_json),
-        "write",
-        Some(sig_json_contents.clone()),
-    )
-    .await?;
+    if format == "dockerv2" {
+        fs_handler(
+            format!("generated/{}/signature/{}", name, hash_sig_json),
+            "write",
+            Some(sig_json_contents.clone()),
+        )
+        .await?;
+    } else {
+        fs_handler(
+            format!(
+                "generated/{}/signature/blobs/sha256/{}",
+                name, hash_sig_json
+            ),
+            "write",
+            Some(sig_json_contents.clone()),
+        )
+        .await?;
+    }
     // create the layer
     let sig_annotations = Annotations {
         image_title: Some(hash_sig_json.clone()),
@@ -168,12 +187,21 @@ pub async fn create_referral_manifest(
         size: 2,
         annotations: None,
     };
-    fs_handler(
-        format!("generated/{}/signature/{}", name, hash),
-        "write",
-        Some(empty),
-    )
-    .await?;
+    if format == "dockerv2" {
+        fs_handler(
+            format!("generated/{}/signature/{}", name, hash),
+            "write",
+            Some(empty),
+        )
+        .await?;
+    } else {
+        fs_handler(
+            format!("generated/{}/signature/blobs/sha256/{}", name, hash),
+            "write",
+            Some(empty),
+        )
+        .await?;
+    }
 
     // assemble to manifest.json (dockerv2 format)
     let subject_ref = Layer {
@@ -185,7 +213,7 @@ pub async fn create_referral_manifest(
     let vec_layers = vec![sig_layer];
     let manifest = Manifest {
         schema_version: Some(2),
-        artifact_type: Some("application/application/vnd.example.signature.v1+json".to_string()),
+        artifact_type: Some("application/vnd.example.signature.v1+json".to_string()),
         media_type: Some("application/vnd.oci.image.manifest.v1+json".to_string()),
         config: Some(cfg_layer.clone()),
         layers: Some(vec_layers.clone()),
@@ -194,10 +222,34 @@ pub async fn create_referral_manifest(
         size: None,
         subject: Some(subject_ref.clone()),
     };
-
     let manifest_json = serde_json::to_string(&manifest).unwrap();
-    let manifest_file = format!("generated/{}/signature/manifest.json", name.clone());
-    fs_handler(manifest_file, "write", Some(manifest_json.clone())).await?;
+    if format == "dockerv2" {
+        let manifest_file = format!("generated/{}/signature/manifest.json", name.clone());
+        fs_handler(manifest_file, "write", Some(manifest_json.clone())).await?;
+    } else {
+        let hash = digest(&manifest_json);
+        let manifest_file = format!("generated/{}/signature/blobs/sha256/{}", name.clone(), hash);
+        fs_handler(manifest_file, "write", Some(manifest_json.clone())).await?;
+        // finally create an index.json
+        let layer = Layer {
+            media_type: "application/vnd.oci.image.manifest.v1+json".to_string(),
+            digest: format!("sha256:{}", hash),
+            size: manifest_json.len() as i64,
+            annotations: None,
+        };
+        let vec_manifests = vec![layer];
+        let index = OCIIndex {
+            schema_version: 2,
+            manifests: vec_manifests.clone(),
+        };
+        let index_json = serde_json::to_string(&index);
+        fs_handler(
+            format!("generated/{}/signature/index.json", name),
+            "write",
+            Some(index_json.unwrap()),
+        )
+        .await?;
+    }
 
     Ok(())
 }

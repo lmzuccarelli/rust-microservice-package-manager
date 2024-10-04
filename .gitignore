@@ -3,4 +3,6 @@
 *.tar.gz
 *.tar.gz.signed
 generated/
+artifacts/
+microservices/
 .ssh/
