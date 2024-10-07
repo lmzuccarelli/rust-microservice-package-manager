@@ -4,8 +4,10 @@ use crate::package::create::*;
 use clap::Parser;
 use custom_logger::*;
 use flate2::read::GzDecoder;
+use mirror_auth::{get_token, ImplTokenInterface};
+use mirror_copy::{ImplUploadImageInterface, UploadImageInterface};
 use mirror_error::MirrorError;
-use mirror_utils::fs_handler;
+use mirror_utils::{fs_handler, ImageReference};
 use package::signature::{create_keypair, sign_artifact, verify_artifact};
 use std::fs;
 use std::fs::File;
@@ -35,6 +37,7 @@ async fn main() -> Result<(), MirrorError> {
         Some(Commands::Package {
             config_file,
             working_dir,
+            skip_tls_verify,
         }) => {
             fs_handler(format!("{}/generated", working_dir), "create_dir", None).await?;
             fs_handler(format!("{}/artifacts", working_dir), "create_dir", None).await?;
@@ -66,7 +69,7 @@ async fn main() -> Result<(), MirrorError> {
                     process::exit(1);
                 } else {
                     log.info(&format!(
-                        "artifacts created in folder generated/{}",
+                        "[package] artifacts created in folder generated/{}",
                         service.name
                     ));
                 }
@@ -79,11 +82,115 @@ async fn main() -> Result<(), MirrorError> {
                 .unwrap();
 
                 let mut tar_m = tar::Builder::new(tar_file);
-                log.ex(&format!("  building archive for {}", service.name.clone()));
+                log.ex(&format!(
+                    "  building artifacts for {}",
+                    service.name.clone()
+                ));
                 tar_m
                     .append_dir_all(".", format!("generated/{}", service.name.clone()))
                     .unwrap();
                 tar_m.finish().expect("should flush manifest contents");
+
+                let parts = service.registry.split("/").collect::<Vec<&str>>();
+                let (name, version) = parts[3].split_once(":").unwrap();
+                let img_ref = ImageReference {
+                    registry: parts[0].to_string(),
+                    namespace: format!("{}/{}", parts[1], parts[2]),
+                    name: name.to_string(),
+                    version: version.to_string(),
+                };
+                let impl_t = ImplTokenInterface {};
+                let impl_u = ImplUploadImageInterface {};
+                let local_token = get_token(
+                    impl_t,
+                    log,
+                    img_ref.registry.clone(),
+                    format!("{}/{}", img_ref.namespace.clone(), img_ref.name.clone()),
+                    !skip_tls_verify,
+                )
+                .await?;
+
+                let paths = fs::read_dir(format!(
+                    "{}/generated/{}/blobs/sha256/",
+                    working_dir, service.name
+                ))
+                .unwrap();
+                for path in paths {
+                    let digest = path
+                        .unwrap()
+                        .path()
+                        .file_name()
+                        .unwrap()
+                        .to_string_lossy()
+                        .to_string();
+                    let req_blobs = impl_u
+                        .process_blob(
+                            log,
+                            img_ref.registry.clone(),
+                            format!("{}/{}", img_ref.namespace, img_ref.name),
+                            format!("{}/generated/{}/blobs/sha256/", working_dir, service.name),
+                            true,
+                            digest.clone(),
+                            local_token.clone(),
+                        )
+                        .await;
+                    if req_blobs.is_err() {
+                        println!("\x1b[1A \x1b[38C{}", "\x1b[1;91m✗\x1b[0m");
+                        log.error(&format!(
+                            "{}",
+                            req_blobs.err().as_ref().unwrap().to_string().to_lowercase()
+                        ));
+                        process::exit(1);
+                    }
+                }
+                let data = fs_handler(
+                    format!("{}/generated/{}/index.json", working_dir, service.name),
+                    "read",
+                    None,
+                )
+                .await?;
+                let res_index = serde_json::from_str(&data);
+                if res_index.is_err() {
+                    println!("\x1b[1A \x1b[38C{}", "\x1b[1;91m✗\x1b[0m");
+                    log.error(&format!(
+                        "parsing index.json {}",
+                        res_index.err().as_ref().unwrap().to_string().to_lowercase()
+                    ));
+                    process::exit(1);
+                }
+                let index: OCIIndex = res_index.unwrap();
+                let digest = index.manifests[0].digest.clone();
+                // read the manifest
+                let mnfst = fs_handler(
+                    format!(
+                        "{}/generated/{}/blobs/sha256/{}",
+                        working_dir,
+                        service.name,
+                        digest.split(":").nth(1).unwrap()
+                    ),
+                    "read",
+                    None,
+                )
+                .await?;
+                let req_mfst = impl_u
+                    .process_manifest_string(
+                        log,
+                        img_ref.registry.clone(),
+                        format!("{}/{}", img_ref.namespace, img_ref.name),
+                        mnfst.clone(),
+                        "oci".to_string(),
+                        img_ref.version,
+                        local_token.clone(),
+                    )
+                    .await;
+                if req_mfst.is_err() {
+                    println!("\x1b[1A \x1b[38C{}", "\x1b[1;91m✗\x1b[0m");
+                    log.error(&format!(
+                        "{}",
+                        req_mfst.err().as_ref().unwrap().to_string().to_lowercase()
+                    ));
+                    process::exit(1);
+                }
                 println!("\x1b[1A \x1b[38C{}", "\x1b[1;92m✓\x1b[0m");
             }
         }

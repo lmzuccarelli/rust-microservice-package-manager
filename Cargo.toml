@@ -1,7 +1,14 @@
 [package]
 name = "microservice-package-manager"
 version = "0.1.0"
+authors = ["lmzuccarelli@redhat.com"]
+description = "a cli package manager (in oci format) and simple oci runtime engine"
+repository = "https://github.com/lmzuccarelli/rust-microservice-package-manager"
+readme = "README.md"
+keywords = ["mcon-run", "mpm", "package manager"]
+license = "Apache"
 edition = "2021"
+rust-version = "1.81"
 
 [dependencies]
 serde = "1.0.196"
@@ -11,6 +18,9 @@ clap = { version = "4.4.6", features = ["derive"] }
 custom-logger = { git = "https://github.com/lmzuccarelli/rust-custom-logger", branch = "main", version = "0.1.4" }
 mirror-error = { git = "https://github.com/lmzuccarelli/rust-mirror-error", branch = "main", version = "0.1.0" }
 mirror-utils = { git = "https://github.com/lmzuccarelli/rust-mirror-utils", branch = "main", version = "0.3.0" }
+#mirror-copy = { git = "https://github.com/lmzuccarelli/rust-mirror-copy", branch = "main", version = "0.8.1" }
+mirror-copy = { path = "../rust-mirror-copy/" }
+mirror-auth = { git = "https://github.com/lmzuccarelli/rust-mirror-auth", branch = "main", version = "0.7.0" }
 tokio = { version = "1.40.0", features = ["full"] }
 serde_yaml = "0.9.34"
 tar = "0.4.41"
@@ -18,4 +28,13 @@ flate2 = "1.0.33"
 sha256 = "1.5.0"
 openssl = "0.10.66"
 base64 = "0.22.1"
+data-encoding = "2.6.0"
+ring = "0.17.8"
+sha2 = "0.10.8"
+
+[profile.release]
+strip = true # Strip symbols from the binary
+opt-level = "s" # Optimize for size
+lto = true # Enable link-time optimization
+codegen-units = 1 # Mazimize size reduction optimization
 

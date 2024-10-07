@@ -1,14 +1,17 @@
-use crate::api::schema::{Layer, Manifest, OCIIndex};
+use crate::api::schema::{Layer, Manifest, ManifestPlatform, OCIIndex};
 use crate::{Annotations, SignatureJson};
 use base64::prelude::*;
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use mirror_error::MirrorError;
 use mirror_utils::fs_handler;
+use sha2::{Digest, Sha256};
 use sha256::digest;
-use std::fs;
 use std::fs::File;
+use std::io;
 use std::io::Read;
+use std::os::unix::fs::MetadataExt;
+use std::{fs, usize};
 
 // first pick up the binary file and create a tar.gz
 pub async fn create_signed_artifact(name: String, path: String) -> Result<(), MirrorError> {
@@ -26,21 +29,25 @@ pub async fn create_signed_artifact(name: String, path: String) -> Result<(), Mi
     }
     let mut binary = res_binary.unwrap();
     tar_file.append_file(name.clone(), &mut binary).unwrap();
-    tar_file.finish().expect("should flush tar contents");
-    let mut buf = vec![];
-    let mut tgz_file = File::open(tar_gz_file.clone()).unwrap();
-    let res_r = tgz_file.read_to_end(&mut buf);
-    if res_r.is_err() {
+    tar_file.into_inner().unwrap().finish().unwrap();
+
+    let mut file = std::fs::File::open(tar_gz_file.clone()).unwrap();
+    let mut hasher = Sha256::new();
+    let res = io::copy(&mut file, &mut hasher);
+    if res.is_err() {
         let err = MirrorError::new(&format!(
-            "reading tar.gz file for hashing {}",
-            res_r.err().unwrap().to_string().to_lowercase()
+            "creating sh256 hash {}",
+            res.err().unwrap().to_string().to_lowercase()
         ));
         return Err(err);
     }
-    let hash = digest(&buf);
+    let digest = format!("{:x}", hasher.finalize());
     let blobs_path = format!("generated/{}/blobs/sha256", name.clone());
     fs_handler(blobs_path.clone(), "create_dir", None).await?;
-    let rename = fs::rename(tar_gz_file, format!("{}/{}", blobs_path.clone(), hash));
+    let rename = fs::rename(
+        tar_gz_file,
+        format!("{}/{}", blobs_path.clone(), digest.clone()),
+    );
     if rename.is_err() {
         let err = MirrorError::new(&format!(
             "renaming file to blob {}",
@@ -48,7 +55,8 @@ pub async fn create_signed_artifact(name: String, path: String) -> Result<(), Mi
         ));
         return Err(err);
     }
-    create_oci_manifest(name.clone(), hash, buf.len()).await?;
+    let metadata = fs::metadata(format!("{}/{}", blobs_path.clone(), digest.clone())).unwrap();
+    create_oci_manifest(name.clone(), digest, metadata.size() as usize).await?;
     Ok(())
 }
 
@@ -58,16 +66,16 @@ pub async fn create_oci_manifest(
     ms_size: usize,
 ) -> Result<(), MirrorError> {
     // create the referenced image manifest
-    let empty = "  ".to_string();
-    let hash = digest(empty.as_bytes());
+    let cfg = fs_handler("templates/config.json".to_string(), "read", None).await?;
+    let hash = digest(cfg.as_bytes());
     let cfg_layer = Layer {
         media_type: "application/vnd.oci.image.config.v1+json".to_string(),
         digest: format!("sha256:{}", hash.clone()),
-        size: 2,
+        size: cfg.len() as i64,
         annotations: None,
     };
     let blob_cfg = format!("generated/{}/blobs/sha256/{}", name, hash);
-    fs_handler(blob_cfg, "write", Some("  ".to_string())).await?;
+    fs_handler(blob_cfg, "write", Some(cfg.to_string())).await?;
 
     let ms_layer = Layer {
         media_type: "application/vnd.oci.image.layer.v1.tar+gzip".to_string(),
@@ -76,22 +84,26 @@ pub async fn create_oci_manifest(
         annotations: None,
     };
     let vec_layers = vec![ms_layer];
+    let mnfst_platform = ManifestPlatform {
+        architecture: "amd64".to_string(),
+        os: "linux".to_string(),
+    };
     let manifest = Manifest {
         schema_version: Some(2),
         artifact_type: None,
-        media_type: Some("application/vnd.oci.image.config.v1+json".to_string()),
+        media_type: Some("application/vnd.oci.image.manifest.v1+json".to_string()),
         config: Some(cfg_layer),
         layers: Some(vec_layers),
         digest: None,
-        platform: None,
+        platform: Some(mnfst_platform),
         size: None,
         subject: None,
     };
 
     let manifest_json = serde_json::to_string(&manifest).unwrap();
     let hash_json = digest(&manifest_json);
-    let blobs_json = format!("generated/{}/blobs/sha256/{}", name, hash_json);
-    fs_handler(blobs_json, "write", Some(manifest_json.clone())).await?;
+    let manifest_blob_json = format!("generated/{}/blobs/sha256/{}", name, hash_json);
+    fs_handler(manifest_blob_json, "write", Some(manifest_json.clone())).await?;
 
     // create oci index first
     let layer = Layer {
@@ -261,3 +273,38 @@ pub async fn create_referral_manifest(
 
     Ok(())
 }
+
+/*
+fn sha256_digest<R: Read>(mut reader: R) -> Result<Digest, MirrorError> {
+    let mut context = Context::new(&SHA256);
+    let mut buffer = [0; 1024];
+    loop {
+        let count = reader.read(&mut buffer).unwrap();
+        if count == 0 {
+            break;
+        }
+        context.update(&buffer[..count]);
+    }
+    Ok(context.finish())
+}
+fn compute_sha256_hash_of_file(file: &str) -> Result<String, MirrorError> {
+    // Open the file
+    let mut file = File::open(file).unwrap();
+
+    // Create a SHA-256 "hasher"
+    let mut hasher = Sha256::new();
+
+    // Read the file in 4KB chunks and feed them to the hasher
+    let mut buffer = [0; 4096];
+    loop {
+        let bytes_read = file.read(&mut buffer).unwrap();
+        if bytes_read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..bytes_read]);
+    }
+
+    // Finalize the hash and get the result as a byte array
+    Ok(format!("{:x}", hasher.finalize()))
+}
+*/

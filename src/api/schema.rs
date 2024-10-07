@@ -3,7 +3,7 @@ use serde_derive::{Deserialize, Serialize};
 
 /// rust-microservice-package-manager cli struct
 #[derive(Parser)]
-#[command(name = "rust-microservice-package-manager")]
+#[command(name = "microservice-package-manager")]
 #[command(author = "Luigi Mario Zuccarelli <luzuccar@redhat.com>")]
 #[command(version = "0.0.1")]
 #[command(about = "A simple command line tool that packages and signs microservice binaries in oci format. It als has an inbuilt runtime engine to launch & mangage microservices", long_about = None)]
@@ -41,6 +41,13 @@ pub enum Commands {
             help = "The base working directory to store generated artifacts (required)"
         )]
         working_dir: String,
+        #[arg(
+            short,
+            long,
+            value_name = "skip-tls-verify",
+            help = "If set wil lskip tls-verify and use http for the remote registry"
+        )]
+        skip_tls_verify: bool,
     },
     /// Stage subcommand (used to pull oci images from a registry and verify binaries are signed)
     Stage {
@@ -59,7 +66,6 @@ pub enum Commands {
         )]
         working_dir: String,
     },
-
     /// CreateReferralManifest subcommand (to build signed artifact manifests)
     CreateReferralManifest {
         #[arg(short, long, value_name = "name", help = "Component name (required)")]
@@ -86,7 +92,6 @@ pub enum Commands {
         )]
         format: String,
     },
-
     /// Keypair (create PEM keypair)
     Keypair {},
     /// Sign
