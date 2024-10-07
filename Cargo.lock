@@ -682,7 +682,7 @@ checksum = "78ca9ab1a0babb1e7d5695e3530886289c18cf2f87ec19a575a0abdce112e3a3"
 
 [[package]]
 name = "microservice-package-manager"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "base64 0.22.1",
  "clap",
@@ -690,7 +690,7 @@ dependencies = [
  "data-encoding",
  "flate2",
  "mirror-auth",
- "mirror-copy 0.8.1",
+ "mirror-copy",
  "mirror-error",
  "mirror-utils",
  "openssl",
@@ -750,29 +750,8 @@ dependencies = [
 
 [[package]]
 name = "mirror-copy"
-version = "0.8.1"
-dependencies = [
- "async-trait",
- "base64 0.21.7",
- "custom-logger",
- "flate2",
- "hex",
- "mirror-error",
- "reqwest",
- "serde",
- "serde_derive",
- "serde_json",
- "sha2",
- "sha256",
- "tar",
- "tokio",
- "urlencoding",
-]
-
-[[package]]
-name = "mirror-copy"
-version = "0.8.1"
-source = "git+https://github.com/lmzuccarelli/rust-mirror-copy?branch=main#3d326f4a9b0b787e13a0d4f0d78def02e2ea724c"
+version = "0.9.0"
+source = "git+https://github.com/lmzuccarelli/rust-mirror-copy?branch=main#d90cc38665a350d17461f6ce5569a258caf63660"
 dependencies = [
  "async-trait",
  "base64 0.21.7",
@@ -798,11 +777,11 @@ source = "git+https://github.com/lmzuccarelli/rust-mirror-error?branch=main#9d9c
 
 [[package]]
 name = "mirror-utils"
-version = "0.3.0"
-source = "git+https://github.com/lmzuccarelli/rust-mirror-utils?branch=main#e32a6a42a40251944da50ac027b9a03d7f0b6e10"
+version = "0.4.0"
+source = "git+https://github.com/lmzuccarelli/rust-mirror-utils?branch=main#b0ca206209e77c5a66851ca0849f33d277eb1ea4"
 dependencies = [
  "custom-logger",
- "mirror-copy 0.8.1 (git+https://github.com/lmzuccarelli/rust-mirror-copy?branch=main)",
+ "mirror-copy",
  "mirror-error",
  "serde",
  "serde_derive",

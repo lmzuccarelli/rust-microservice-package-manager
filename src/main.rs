@@ -5,7 +5,7 @@ use clap::Parser;
 use custom_logger::*;
 use flate2::read::GzDecoder;
 use mirror_auth::{get_token, ImplTokenInterface};
-use mirror_copy::{ImplUploadImageInterface, UploadImageInterface};
+use mirror_copy::{ImplUploadImageInterface, ManifestType, UploadImageInterface};
 use mirror_error::MirrorError;
 use mirror_utils::{fs_handler, ImageReference};
 use package::signature::{create_keypair, sign_artifact, verify_artifact};
@@ -39,6 +39,7 @@ async fn main() -> Result<(), MirrorError> {
             working_dir,
             skip_tls_verify,
         }) => {
+            fs_handler(format!("{}/generated", working_dir), "remove_dir", None).await?;
             fs_handler(format!("{}/generated", working_dir), "create_dir", None).await?;
             fs_handler(format!("{}/artifacts", working_dir), "create_dir", None).await?;
             let config = load_config(config_file.to_string()).await?;
@@ -54,7 +55,8 @@ async fn main() -> Result<(), MirrorError> {
                 .await;
                 if res.is_err() {
                     log.error(&format!(
-                        "[package] signing binary {:#?}",
+                        "[package] signing binary {} {}",
+                        service.name.clone(),
                         res.err().as_ref().unwrap().to_string().to_lowercase()
                     ));
                     process::exit(1);
@@ -63,7 +65,8 @@ async fn main() -> Result<(), MirrorError> {
                     create_signed_artifact(service.name.clone(), service.binary_path.clone()).await;
                 if res.is_err() {
                     log.error(&format!(
-                        "[package] creating package {}",
+                        "[package] creating package {} {}",
+                        service.name.clone(),
                         res.as_ref().err().unwrap().to_string().to_ascii_lowercase()
                     ));
                     process::exit(1);
@@ -178,7 +181,7 @@ async fn main() -> Result<(), MirrorError> {
                         img_ref.registry.clone(),
                         format!("{}/{}", img_ref.namespace, img_ref.name),
                         mnfst.clone(),
-                        "oci".to_string(),
+                        ManifestType::Oci,
                         img_ref.version,
                         local_token.clone(),
                     )
