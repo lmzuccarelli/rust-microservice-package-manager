@@ -30,6 +30,9 @@ base64 = "0.22.1"
 data-encoding = "2.6.0"
 ring = "0.17.8"
 sha2 = "0.10.8"
+futures-util = {version =  "0.3.31", features = ["sink"] }
+http = "1.1.0"
+tokio-websockets = {version = "0.10.1",features = ["client", "fastrand", "server", "sha1_smol"] }
 
 [profile.release]
 strip = true # Strip symbols from the binary

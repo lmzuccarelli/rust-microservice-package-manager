@@ -5,7 +5,10 @@ use clap::Parser;
 use custom_logger::*;
 use flate2::read::GzDecoder;
 use mirror_auth::{get_token, ImplTokenInterface};
-use mirror_copy::{ImplUploadImageInterface, ManifestType, UploadImageInterface};
+use mirror_copy::{
+    DownloadImageInterface, ImplDownloadImageInterface, ImplUploadImageInterface, ManifestType,
+    UploadImageInterface,
+};
 use mirror_error::MirrorError;
 use mirror_utils::{fs_handler, ImageReference};
 use package::signature::{create_keypair, sign_artifact, verify_artifact};
@@ -17,6 +20,7 @@ use tar::Archive;
 mod api;
 mod config;
 mod package;
+mod websocket;
 
 #[tokio::main]
 async fn main() -> Result<(), MirrorError> {
@@ -200,7 +204,10 @@ async fn main() -> Result<(), MirrorError> {
         Some(Commands::Stage {
             config_file,
             working_dir,
+            from_registry,
+            skip_tls_verify,
         }) => {
+            log.trace(&format!("from-registry {}", from_registry));
             let config = load_config(config_file.to_string()).await?;
             let sc = parse_yaml_config(config)?;
             log.debug(&format!("working-dir {}", working_dir));
@@ -211,21 +218,96 @@ async fn main() -> Result<(), MirrorError> {
                 fs_handler(staging_dir.clone(), "create_dir", None).await?;
                 let ms_dir = format!("{}/microservices/{}", working_dir, service.name.clone());
                 fs_handler(ms_dir.clone(), "create_dir", None).await?;
-                let data = std::fs::File::open(format!(
-                    "{}/artifacts/{}.pkg",
-                    working_dir,
-                    service.name.clone()
-                ));
-                let mut archive = Archive::new(data.unwrap());
-                let res = archive.unpack(staging_dir.clone());
-                if res.is_err() {
-                    println!("\x1b[1A \x1b[38C{}", "\x1b[1;91m✗\x1b[0m");
-                    log.error(&format!(
-                        "[staging] untar service package {}",
-                        res.as_ref().err().unwrap().to_string().to_ascii_lowercase()
+                if !from_registry {
+                    let data = std::fs::File::open(format!(
+                        "{}/artifacts/{}.pkg",
+                        working_dir,
+                        service.name.clone()
                     ));
-                    process::exit(1);
+                    let mut archive = Archive::new(data.unwrap());
+                    let res = archive.unpack(staging_dir.clone());
+                    if res.is_err() {
+                        println!("\x1b[1A \x1b[38C{}", "\x1b[1;91m✗\x1b[0m");
+                        log.error(&format!(
+                            "[staging] untar service package {}",
+                            res.as_ref().err().unwrap().to_string().to_ascii_lowercase()
+                        ));
+                        process::exit(1);
+                    }
+                } else {
+                    // pull artifacts from registry
+                    let parts = service.registry.split("/").collect::<Vec<&str>>();
+                    let (name, version) = parts[3].split_once(":").unwrap();
+
+                    let img_ref = ImageReference {
+                        registry: parts[0].to_string(),
+                        namespace: format!("{}/{}", parts[1], parts[2]),
+                        name: name.to_string(),
+                        version: version.to_string(),
+                    };
+                    let impl_t = ImplTokenInterface {};
+                    let local_token = get_token(
+                        impl_t,
+                        log,
+                        img_ref.registry.clone(),
+                        format!("{}/{}", img_ref.namespace.clone(), img_ref.name.clone()),
+                        !skip_tls_verify,
+                    )
+                    .await?;
+
+                    let impl_d = ImplDownloadImageInterface {};
+                    let url = format!(
+                        "https://{}/v2/{}/{}/manifests/{}",
+                        img_ref.registry, img_ref.namespace, img_ref.name, img_ref.version
+                    );
+                    let manifest = impl_d
+                        .get_manifest(url.clone(), local_token.clone())
+                        .await?;
+
+                    fs_handler(
+                        format!("{}/index.json", staging_dir.clone()),
+                        "write",
+                        Some(manifest.clone()),
+                    )
+                    .await?;
+
+                    let res_json = serde_json::from_str(&manifest);
+                    log.trace(&format!("index.json {}", manifest));
+                    if res_json.is_err() {
+                        println!("\x1b[1A \x1b[38C{}", "\x1b[1;91m✗\x1b[0m");
+                        log.error(&format!(
+                            "[staging] parsing index.json {}",
+                            res_json
+                                .as_ref()
+                                .err()
+                                .unwrap()
+                                .to_string()
+                                .to_ascii_lowercase()
+                        ));
+                        process::exit(1);
+                    }
+                    let oci_index: Manifest = res_json.unwrap();
+                    let blob_sum_sha = oci_index.layers.unwrap()[0].digest.clone();
+                    let blob_sum = blob_sum_sha.split(":").nth(1).unwrap();
+                    let blobs_dir = format!("{}/blobs/sha256/", staging_dir);
+                    impl_d
+                        .get_blob(
+                            log,
+                            blobs_dir.clone(),
+                            url,
+                            local_token,
+                            false,
+                            blob_sum_sha.to_string(),
+                        )
+                        .await?;
+                    fs_handler(
+                        format!("{}/{}", blobs_dir, &blob_sum[..2]),
+                        "remove_dir",
+                        None,
+                    )
+                    .await?;
                 }
+
                 let data = fs::read_to_string(staging_dir.clone() + &"/index.json");
                 if data.is_err() {
                     println!("\x1b[1A \x1b[38C{}", "\x1b[1;91m✗\x1b[0m");
@@ -266,11 +348,16 @@ async fn main() -> Result<(), MirrorError> {
                         let manifest: Manifest = res_manifest_json.unwrap();
                         // only interested in the tar.gz layer
                         let service_digest = manifest.layers.unwrap()[0].digest.clone();
-                        let tar_gz = File::open(format!(
-                            "{}/blobs/sha256/{}",
-                            staging_dir,
-                            service_digest.split(":").nth(1).unwrap()
-                        ));
+                        let blob_file = match from_registry {
+                            true => format!(
+                                "{}/blobs/sha256/{}/{}",
+                                staging_dir,
+                                &service_digest[..2],
+                                service_digest
+                            ),
+                            false => format!("{}/blobs/sha256/{}/", staging_dir, service_digest),
+                        };
+                        let tar_gz = File::open(blob_file);
                         let tar = GzDecoder::new(tar_gz.unwrap());
                         let mut archive = Archive::new(tar);
                         let res_untar = archive.unpack(ms_dir);
@@ -287,7 +374,7 @@ async fn main() -> Result<(), MirrorError> {
                             ));
                             process::exit(1);
                         }
-                        fs_handler(staging_dir, "remove_dir", None).await?;
+                        //fs_handler(format!("{}/staging", working_dir), "remove_dir", None).await?;
                     }
                 }
                 println!("\x1b[1A \x1b[38C{}", "\x1b[1;92m✓\x1b[0m");

@@ -45,7 +45,7 @@ pub enum Commands {
             short,
             long,
             value_name = "skip-tls-verify",
-            help = "If set wil lskip tls-verify and use http for the remote registry"
+            help = "If set will skip tls-verify and use http for the remote registry"
         )]
         skip_tls_verify: bool,
     },
@@ -65,6 +65,20 @@ pub enum Commands {
             help = "The base working directory to hold the untarred binary files (required)"
         )]
         working_dir: String,
+        #[arg(
+            short,
+            long,
+            value_name = "from-registry",
+            help = "if set will pull oci artifacts from registry"
+        )]
+        from_registry: bool,
+        #[arg(
+            short,
+            long,
+            value_name = "skip-tls-verify",
+            help = "If set will skip tls-verify and use http for the remote registry"
+        )]
+        skip_tls_verify: bool,
     },
     /// CreateReferralManifest subcommand (to build signed artifact manifests)
     CreateReferralManifest {
