@@ -11,14 +11,8 @@ async fn handle_connection(
     mut ws_stream: WebSocketStream<TcpStream>,
     bcast_tx: Sender<String>,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    ws_stream
-        .send(Message::text("Welcome to chat! Type a message".to_string()))
-        .await?;
     let mut bcast_rx = bcast_tx.subscribe();
 
-    // A continuous loop for concurrently performing two tasks: (1) receiving
-    // messages from `ws_stream` and broadcasting them, and (2) receiving
-    // messages on `bcast_rx` and sending them to the client.
     loop {
         tokio::select! {
             incoming = ws_stream.next() => {
@@ -40,7 +34,7 @@ async fn handle_connection(
     }
 }
 
-async fn start_server() -> Result<(), Box<dyn Error + Send + Sync>> {
+pub async fn start_server() -> Result<(), Box<dyn Error + Send + Sync>> {
     let (bcast_tx, _) = channel(16);
 
     let listener = TcpListener::bind("127.0.0.1:2000").await?;
@@ -53,7 +47,6 @@ async fn start_server() -> Result<(), Box<dyn Error + Send + Sync>> {
         tokio::spawn(async move {
             // Wrap the raw TCP stream into a websocket.
             let ws_stream = ServerBuilder::new().accept(socket).await?;
-
             handle_connection(addr, ws_stream, bcast_tx).await
         });
     }

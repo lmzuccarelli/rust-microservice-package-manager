@@ -21,6 +21,15 @@ pub struct Cli {
         help = "Set the log level [possible values: info, debug, trace]"
     )]
     pub loglevel: Option<String>,
+
+    /// set the mode (client or server)
+    #[arg(
+        short,
+        long,
+        value_name = "mode",
+        help = "Set the mode [possible values: controller, worker] (required)"
+    )]
+    pub mode: Option<String>,
 }
 
 #[derive(Subcommand)]
@@ -79,6 +88,13 @@ pub enum Commands {
             help = "If set will skip tls-verify and use http for the remote registry"
         )]
         skip_tls_verify: bool,
+        #[arg(
+            short,
+            long,
+            value_name = "node",
+            help = "Deploy to a specific node (hostname of server) or all servers"
+        )]
+        node: String,
     },
     /// CreateReferralManifest subcommand (to build signed artifact manifests)
     CreateReferralManifest {
@@ -127,6 +143,71 @@ pub enum Commands {
             help = "The artfifact to verify (required)"
         )]
         artifact: String,
+    },
+    /// Start service
+    Start {
+        #[arg(
+            short,
+            long,
+            value_name = "config_file",
+            help = "The artfifact to verify (required)"
+        )]
+        config_file: String,
+        #[arg(
+            short,
+            long,
+            value_name = "working-dir",
+            help = "The base working directory to hold the untarred binary files (required)"
+        )]
+        working_dir: String,
+        #[arg(
+            short,
+            long,
+            value_name = "skip-tls-verify",
+            help = "If set will skip tls-verify and use http for the remote registry"
+        )]
+        skip_tls_verify: bool,
+        #[arg(
+            short,
+            long,
+            value_name = "node",
+            help = "Deploy to a specific node (hostname of server) or all servers"
+        )]
+        node: String,
+        #[arg(short, long, value_name = "service", help = "The service to start")]
+        service: String,
+    },
+    Stop {
+        #[arg(
+            short,
+            long,
+            value_name = "config_file",
+            help = "The artfifact to verify (required)"
+        )]
+        config_file: String,
+        #[arg(
+            short,
+            long,
+            value_name = "working-dir",
+            help = "The base working directory to hold the untarred binary files (required)"
+        )]
+        working_dir: String,
+        #[arg(
+            short,
+            long,
+            value_name = "skip-tls-verify",
+            help = "If set will skip tls-verify and use http for the remote registry"
+        )]
+        skip_tls_verify: bool,
+        #[arg(
+            short,
+            long,
+            value_name = "node",
+            help = "Deploy to a specific node (hostname of server) or all servers"
+        )]
+        node: String,
+        #[arg(short, long, value_name = "service", help = "The service to stop")]
+        service: String,
     },
 }
 
@@ -360,4 +441,43 @@ pub struct KeyValue {
 pub enum Imageformat {
     OCI,
     DOCKERV2,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct APIParameters {
+    #[serde(rename = "command")]
+    pub command: String,
+
+    #[serde(rename = "node")]
+    pub node: String,
+
+    #[serde(rename = "service")]
+    pub service: String,
+
+    #[serde(rename = "configFile")]
+    pub config_file: String,
+
+    #[serde(rename = "workingDir")]
+    pub working_dir: String,
+
+    #[serde(rename = "fromRegistry")]
+    pub from_registry: bool,
+
+    #[serde(rename = "skipTlsVerify")]
+    pub skip_tls_verify: bool,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct APIResponse {
+    #[serde(rename = "status")]
+    pub status: String,
+
+    #[serde(rename = "node")]
+    pub node: String,
+
+    #[serde(rename = "service")]
+    pub service: String,
+
+    #[serde(rename = "text")]
+    pub text: String,
 }

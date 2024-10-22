@@ -273,38 +273,3 @@ pub async fn create_referral_manifest(
 
     Ok(())
 }
-
-/*
-fn sha256_digest<R: Read>(mut reader: R) -> Result<Digest, MirrorError> {
-    let mut context = Context::new(&SHA256);
-    let mut buffer = [0; 1024];
-    loop {
-        let count = reader.read(&mut buffer).unwrap();
-        if count == 0 {
-            break;
-        }
-        context.update(&buffer[..count]);
-    }
-    Ok(context.finish())
-}
-fn compute_sha256_hash_of_file(file: &str) -> Result<String, MirrorError> {
-    // Open the file
-    let mut file = File::open(file).unwrap();
-
-    // Create a SHA-256 "hasher"
-    let mut hasher = Sha256::new();
-
-    // Read the file in 4KB chunks and feed them to the hasher
-    let mut buffer = [0; 4096];
-    loop {
-        let bytes_read = file.read(&mut buffer).unwrap();
-        if bytes_read == 0 {
-            break;
-        }
-        hasher.update(&buffer[..bytes_read]);
-    }
-
-    // Finalize the hash and get the result as a byte array
-    Ok(format!("{:x}", hasher.finalize()))
-}
-*/
