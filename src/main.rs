@@ -33,9 +33,13 @@ async fn main() -> Result<(), MirrorError> {
     } else {
         mode = args.mode.as_ref().unwrap()
     }
+    let server_ip = match args.server_ip {
+        None => "127.0.0.1".to_string(),
+        Some(ip) => ip,
+    };
     match mode {
         "worker" => {
-            let res = start_client(log).await;
+            let res = start_client(log, server_ip).await;
             if res.is_err() {
                 log.error(&format!(
                     "worker {}",
@@ -45,7 +49,7 @@ async fn main() -> Result<(), MirrorError> {
             }
         }
         "controller" => {
-            let res = start_server(log).await;
+            let res = start_server(log, server_ip).await;
             if res.is_err() {
                 log.error(&format!(
                     "controller {}",
@@ -70,7 +74,7 @@ async fn main() -> Result<(), MirrorError> {
                     skip_tls_verify: *skip_tls_verify,
                 };
                 let message = serde_json::to_string(&api_params).unwrap();
-                let res = send_message(log, message).await;
+                let res = send_message(log, message, server_ip).await;
                 if res.is_err() {
                     log.error(&format!(
                         "package {}",
@@ -97,7 +101,7 @@ async fn main() -> Result<(), MirrorError> {
                     skip_tls_verify: *skip_tls_verify,
                 };
                 let message = serde_json::to_string(&api_params).unwrap();
-                let res = send_message(log, message).await;
+                let res = send_message(log, message, server_ip).await;
                 if res.is_err() {
                     log.error(&format!(
                         "send message {}",
@@ -175,7 +179,7 @@ async fn main() -> Result<(), MirrorError> {
                     skip_tls_verify: *skip_tls_verify,
                 };
                 let message = serde_json::to_string(&api_params).unwrap();
-                let res = send_message(log, message).await;
+                let res = send_message(log, message, server_ip).await;
                 if res.is_err() {
                     log.error(&format!(
                         "send message {}",
@@ -202,7 +206,7 @@ async fn main() -> Result<(), MirrorError> {
                     skip_tls_verify: *skip_tls_verify,
                 };
                 let message = serde_json::to_string(&api_params).unwrap();
-                let res = send_message(log, message).await;
+                let res = send_message(log, message, server_ip).await;
                 if res.is_err() {
                     log.error(&format!(
                         "send message {}",
@@ -223,7 +227,7 @@ async fn main() -> Result<(), MirrorError> {
                     skip_tls_verify: true,
                 };
                 let message = serde_json::to_string(&api_params).unwrap();
-                let res = send_message(log, message).await;
+                let res = send_message(log, message, server_ip).await;
                 if res.is_err() {
                     log.error(&format!(
                         "send message {}",

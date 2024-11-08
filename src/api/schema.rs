@@ -6,7 +6,7 @@ use serde_derive::{Deserialize, Serialize};
 #[command(name = "microservice-package-manager")]
 #[command(author = "Luigi Mario Zuccarelli <luzuccar@redhat.com>")]
 #[command(version = "0.0.1")]
-#[command(about = "A simple command line tool that packages and signs microservice binaries in oci format. It als has an inbuilt runtime engine to launch & mangage microservices", long_about = None)]
+#[command(about = "A simple command line tool that packages and signs microservice binaries in oci format. It als has an in-built runtime engine to launch & mangage microservices", long_about = None)]
 #[command(author, version, about, long_about = None)]
 pub struct Cli {
     #[command(subcommand)]
@@ -30,11 +30,20 @@ pub struct Cli {
         help = "Set the mode [possible values: controller, worker] (required)"
     )]
     pub mode: Option<String>,
+
+    /// server ip address (only for worker)
+    #[arg(
+        short,
+        long,
+        value_name = "server-ip",
+        help = "The server ip address for the worker to connect to (default 127.0.0.1)"
+    )]
+    pub server_ip: Option<String>,
 }
 
 #[derive(Subcommand)]
 pub enum Commands {
-    /// Package subcommand (package a signed binary in oci image format)
+    /// package a signed binary in oci image format (build tar or push to remote registry)
     Package {
         #[arg(
             short,
@@ -58,7 +67,7 @@ pub enum Commands {
         )]
         skip_tls_verify: bool,
     },
-    /// Stage subcommand (used to pull oci images from a registry and verify binaries are signed)
+    /// used to pull oci images from a registry and verify binaries are signed
     Stage {
         #[arg(
             short,
@@ -124,7 +133,7 @@ pub enum Commands {
     },
     /// Keypair (create PEM keypair)
     Keypair {},
-    /// Sign
+    /// Sign a binary artifact
     Sign {
         #[arg(
             short,
@@ -134,7 +143,7 @@ pub enum Commands {
         )]
         artifact: String,
     },
-    /// Verify
+    /// Verify the binary artifact (if signed will return true)
     Verify {
         #[arg(
             short,
@@ -144,7 +153,7 @@ pub enum Commands {
         )]
         artifact: String,
     },
-    /// Start a sepecific microservice
+    /// Start a specific microservice
     Start {
         #[arg(
             short,
@@ -177,7 +186,7 @@ pub enum Commands {
         #[arg(short, long, value_name = "service", help = "The service to start")]
         service: String,
     },
-    /// Stop a sepecific microservice
+    /// Stop a specific microservice
     Stop {
         #[arg(
             short,
@@ -210,7 +219,7 @@ pub enum Commands {
         #[arg(short, long, value_name = "service", help = "The service to stop")]
         service: String,
     },
-    /// List all nodes
+    /// List all current registered nodes
     List {},
 }
 

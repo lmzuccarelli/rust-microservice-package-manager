@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use crate::workflow::handler;
 use crate::{api::schema::APIParameters, APIResponse};
 use custom_logger::*;
@@ -8,8 +10,9 @@ use http::Uri;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio_websockets::{ClientBuilder, Message};
 
-pub async fn start_client(log: &Logging) -> Result<(), tokio_websockets::Error> {
-    let (mut ws_stream, _) = ClientBuilder::from_uri(Uri::from_static("ws://127.0.0.1:2000"))
+pub async fn start_client(log: &Logging, server_ip: String) -> Result<(), tokio_websockets::Error> {
+    let address = &format!("ws://{}:2000", server_ip);
+    let (mut ws_stream, _) = ClientBuilder::from_uri(Uri::from_str(address).unwrap())
         .connect()
         .await?;
 
@@ -33,8 +36,8 @@ pub async fn start_client(log: &Logging) -> Result<(), tokio_websockets::Error> 
                                 // if its not ok try the APIParameters
                                 let api_params: APIParameters = serde_json::from_str(&json_data).unwrap();
                                 let mut message =  APIResponse {
-                                    status: "KO".to_string(),
-                                    text: "ko".to_string(),
+                                    status: "".to_string(),
+                                    text: "".to_string(),
                                     node: "".to_string(),
                                     service: "".to_string(),
                                 };
@@ -118,8 +121,13 @@ pub async fn start_client(log: &Logging) -> Result<(), tokio_websockets::Error> 
     }
 }
 
-pub async fn send_message(log: &Logging, message: String) -> Result<(), tokio_websockets::Error> {
-    let (mut ws_stream, _) = ClientBuilder::from_uri(Uri::from_static("ws://127.0.0.1:2000"))
+pub async fn send_message(
+    log: &Logging,
+    message: String,
+    server_ip: String,
+) -> Result<(), tokio_websockets::Error> {
+    let address = &format!("ws://{}:2000", server_ip);
+    let (mut ws_stream, _) = ClientBuilder::from_uri(Uri::from_str(address).unwrap())
         .connect()
         .await?;
 

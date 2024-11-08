@@ -32,10 +32,14 @@ async fn handle_connection(
     }
 }
 
-pub async fn start_server(log: &Logging) -> Result<(), Box<dyn Error + Send + Sync>> {
+pub async fn start_server(
+    log: &Logging,
+    server_ip: String,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
     let (bcast_tx, _) = channel(16);
-    let listener = TcpListener::bind("127.0.0.1:2000").await?;
-    log.info("listening on port 2000");
+    let address = &format!("{}:2000", server_ip);
+    let listener = TcpListener::bind(address.clone()).await?;
+    log.info(&format!("listening on (address and port) : {}", address));
     loop {
         let (socket, addr) = listener.accept().await?;
         log.debug(&format!("new connection from {addr:?}"));
