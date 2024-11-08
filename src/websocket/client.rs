@@ -3,6 +3,7 @@ use crate::{api::schema::APIParameters, APIResponse};
 use custom_logger::*;
 use futures_util::stream::StreamExt;
 use futures_util::SinkExt;
+use gethostname::gethostname;
 use http::Uri;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio_websockets::{ClientBuilder, Message};
@@ -29,28 +30,35 @@ pub async fn start_client(log: &Logging) -> Result<(), tokio_websockets::Error> 
                             if api_response_result.is_ok() {
                                 log.info(&format!("response {:?}",api_response_result.unwrap()));
                             } else {
-                                // if its mot ok try the APIParameters
+                                // if its not ok try the APIParameters
                                 let api_params: APIParameters = serde_json::from_str(&json_data).unwrap();
                                 let mut message =  APIResponse {
-                                    status: "OK".to_string(),
-                                    text: "ok".to_string(),
-                                    node: "all".to_string(),
-                                    service: "stage".to_string(),
+                                    status: "KO".to_string(),
+                                    text: "ko".to_string(),
+                                    node: "".to_string(),
+                                    service: "".to_string(),
                                 };
                                 match api_params.command.as_str() {
                                     "package" => {
-                                        let res = handler::package(
-                                            log,
-                                            api_params.working_dir,
-                                            api_params.config_file,
-                                            api_params.skip_tls_verify,
-                                        )
-                                        .await;
-                                        if res.is_err() {
-                                            message.status = "KO".to_string();
-                                            message.text = format!("package error {}",res.err().unwrap().to_string().to_lowercase());
+                                        if api_params.node == gethostname().to_string_lossy().to_string() {
+                                            let res = handler::package(
+                                                log,
+                                                api_params.working_dir,
+                                                api_params.config_file,
+                                                api_params.skip_tls_verify,
+                                            )
+                                            .await;
+                                            if res.is_err() {
+                                                message.status = "KO".to_string();
+                                                message.text = format!("package error {}",res.err().unwrap().to_string().to_lowercase());
+                                            } else {
+                                                message.text = format!("package completed successfully");
+                                            }
                                         } else {
-                                           message.text = format!("package completed succussfully");
+                                            message.status = "KO".to_string();
+                                            message.text = format!("hostname {} does not match node {} parameter",
+                                                gethostname().to_string_lossy().to_string(),
+                                                api_params.node);
                                         }
                                     },
                                     "stage" => {
@@ -66,7 +74,23 @@ pub async fn start_client(log: &Logging) -> Result<(), tokio_websockets::Error> 
                                             message.status = "KO".to_string();
                                             message.text = format!("staging error {}",res.err().unwrap().to_string().to_lowercase());
                                         } else {
-                                           message.text = format!("staging completed succussfully");
+                                           message.status = "OK".to_string();
+                                           message.text = format!("staging completed successfully");
+                                        }
+                                    },
+                                    "list" => {
+                                        let res = handler::list(
+                                            log,
+                                        )
+                                        .await;
+                                        if res.is_err() {
+                                            message.status = "KO".to_string();
+                                            message.text = format!("list error {}",res.err().unwrap().to_string().to_lowercase());
+                                        } else {
+                                            message.status = "OK".to_string();
+                                            message.service = "list".to_string();
+                                            message.node = gethostname().to_string_lossy().to_string();
+                                            message.text = res.unwrap();
                                         }
                                     },
                                     &_ => {
@@ -94,7 +118,7 @@ pub async fn start_client(log: &Logging) -> Result<(), tokio_websockets::Error> 
     }
 }
 
-pub async fn send_message(message: String) -> Result<(), tokio_websockets::Error> {
+pub async fn send_message(log: &Logging, message: String) -> Result<(), tokio_websockets::Error> {
     let (mut ws_stream, _) = ClientBuilder::from_uri(Uri::from_static("ws://127.0.0.1:2000"))
         .connect()
         .await?;
@@ -105,7 +129,7 @@ pub async fn send_message(message: String) -> Result<(), tokio_websockets::Error
             match incoming {
                 Some(Ok(msg)) => {
                     if let Some(text) = msg.as_text() {
-                        println!("From server: {}", text);
+                        log.debug(&format!("from server: {}", text));
                     }
                 }
                 Some(Err(err)) => return Err(err.into()),

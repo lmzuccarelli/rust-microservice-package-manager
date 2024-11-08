@@ -144,7 +144,7 @@ pub enum Commands {
         )]
         artifact: String,
     },
-    /// Start service
+    /// Start a sepecific microservice
     Start {
         #[arg(
             short,
@@ -177,6 +177,7 @@ pub enum Commands {
         #[arg(short, long, value_name = "service", help = "The service to start")]
         service: String,
     },
+    /// Stop a sepecific microservice
     Stop {
         #[arg(
             short,
@@ -209,6 +210,8 @@ pub enum Commands {
         #[arg(short, long, value_name = "service", help = "The service to stop")]
         service: String,
     },
+    /// List all nodes
+    List {},
 }
 
 #[derive(Serialize, Deserialize)]

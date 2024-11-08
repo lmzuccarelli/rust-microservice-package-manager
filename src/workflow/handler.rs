@@ -4,6 +4,8 @@ use crate::package::create::*;
 use crate::package::signature::*;
 use custom_logger::*;
 use flate2::read::GzDecoder;
+use gethostname::gethostname;
+use local_ip_address::linux::local_ip;
 use mirror_auth::{get_token, ImplTokenInterface};
 use mirror_copy::{
     DownloadImageInterface, ImplDownloadImageInterface, ImplUploadImageInterface, ManifestType,
@@ -361,4 +363,14 @@ pub async fn stage(
         println!("\x1b[1A \x1b[38C{}", "\x1b[1;92m✓\x1b[0m");
     }
     Ok(())
+}
+
+pub async fn list(log: &Logging) -> Result<String, MirrorError> {
+    let node_info = format!(
+        "{}:{}",
+        gethostname().to_string_lossy().to_string(),
+        local_ip().unwrap()
+    );
+    log.trace(&format!("node info {} ", node_info));
+    Ok(node_info)
 }

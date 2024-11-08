@@ -45,7 +45,7 @@ async fn main() -> Result<(), MirrorError> {
             }
         }
         "controller" => {
-            let res = start_server().await;
+            let res = start_server(log).await;
             if res.is_err() {
                 log.error(&format!(
                     "controller {}",
@@ -70,7 +70,7 @@ async fn main() -> Result<(), MirrorError> {
                     skip_tls_verify: *skip_tls_verify,
                 };
                 let message = serde_json::to_string(&api_params).unwrap();
-                let res = send_message(message).await;
+                let res = send_message(log, message).await;
                 if res.is_err() {
                     log.error(&format!(
                         "package {}",
@@ -97,7 +97,7 @@ async fn main() -> Result<(), MirrorError> {
                     skip_tls_verify: *skip_tls_verify,
                 };
                 let message = serde_json::to_string(&api_params).unwrap();
-                let res = send_message(message).await;
+                let res = send_message(log, message).await;
                 if res.is_err() {
                     log.error(&format!(
                         "send message {}",
@@ -175,7 +175,7 @@ async fn main() -> Result<(), MirrorError> {
                     skip_tls_verify: *skip_tls_verify,
                 };
                 let message = serde_json::to_string(&api_params).unwrap();
-                let res = send_message(message).await;
+                let res = send_message(log, message).await;
                 if res.is_err() {
                     log.error(&format!(
                         "send message {}",
@@ -202,7 +202,7 @@ async fn main() -> Result<(), MirrorError> {
                     skip_tls_verify: *skip_tls_verify,
                 };
                 let message = serde_json::to_string(&api_params).unwrap();
-                let res = send_message(message).await;
+                let res = send_message(log, message).await;
                 if res.is_err() {
                     log.error(&format!(
                         "send message {}",
@@ -210,6 +210,27 @@ async fn main() -> Result<(), MirrorError> {
                     ));
                 } else {
                     log.info("stop message sent");
+                }
+            }
+            Some(Commands::List {}) => {
+                let api_params = APIParameters {
+                    command: "list".to_string(),
+                    node: "all".to_string(),
+                    service: "".to_string(),
+                    config_file: "".to_string(),
+                    working_dir: "".to_string(),
+                    from_registry: true,
+                    skip_tls_verify: true,
+                };
+                let message = serde_json::to_string(&api_params).unwrap();
+                let res = send_message(log, message).await;
+                if res.is_err() {
+                    log.error(&format!(
+                        "send message {}",
+                        res.err().unwrap().to_string().to_lowercase()
+                    ));
+                } else {
+                    log.info("list message sent");
                 }
             }
             None => {

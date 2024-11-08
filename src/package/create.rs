@@ -128,6 +128,7 @@ pub async fn create_oci_manifest(
     Ok(())
 }
 
+// referral manifest (oci format, used to create signature layer)
 pub async fn create_referral_manifest(
     name: String,
     referral_url_digest: String,
@@ -270,6 +271,5 @@ pub async fn create_referral_manifest(
         )
         .await?;
     }
-
     Ok(())
 }
