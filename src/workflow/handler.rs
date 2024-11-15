@@ -1,4 +1,5 @@
 use crate::api::schema::*;
+use crate::command::process::{start_service, stop_service};
 use crate::config::read::*;
 use crate::package::create::*;
 use crate::package::signature::*;
@@ -340,6 +341,7 @@ pub async fn stage(
                     ),
                     false => format!("{}/blobs/sha256/{}/", staging_dir, service_digest),
                 };
+                log.debug(&format!("blob file {}", blob_file));
                 let tar_gz = File::open(blob_file);
                 let tar = GzDecoder::new(tar_gz.unwrap());
                 let mut archive = Archive::new(tar);
@@ -357,7 +359,7 @@ pub async fn stage(
                     ));
                     process::exit(1);
                 }
-                //fs_handler(format!("{}/staging", working_dir), "remove_dir", None).await?;
+                fs_handler(format!("{}/staging", working_dir), "remove_dir", None).await?;
             }
         }
         println!("\x1b[1A \x1b[38C{}", "\x1b[1;92m✓\x1b[0m");
@@ -373,4 +375,34 @@ pub async fn list(log: &Logging) -> Result<String, MirrorError> {
     );
     log.trace(&format!("node info {} ", node_info));
     Ok(node_info)
+}
+
+pub async fn start(
+    log: &Logging,
+    service: String,
+    working_dir: String,
+    config_file: String,
+) -> Result<(), MirrorError> {
+    let config = load_config(config_file.to_string()).await?;
+    let mc = parse_yaml_config(config)?;
+    let svc_schema = get_service(service, mc);
+    let res = start_service(log, working_dir, svc_schema).await;
+    if res.is_err() {
+        return Err(MirrorError::new(&format!(
+            "{}",
+            res.err().unwrap().to_string().to_lowercase()
+        )));
+    }
+    Ok(())
+}
+
+pub async fn stop(log: &Logging, service: String) -> Result<(), MirrorError> {
+    let res = stop_service(log, service).await;
+    if res.is_err() {
+        return Err(MirrorError::new(&format!(
+            "[start] {}",
+            res.err().unwrap().to_string().to_lowercase()
+        )));
+    }
+    Ok(())
 }

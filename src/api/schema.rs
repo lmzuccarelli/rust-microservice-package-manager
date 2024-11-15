@@ -66,6 +66,13 @@ pub enum Commands {
             help = "If set will skip tls-verify and use http for the remote registry"
         )]
         skip_tls_verify: bool,
+        #[arg(
+            short,
+            long,
+            value_name = "node",
+            help = "Package artifacts on a specific node (must be a registered client)"
+        )]
+        node: String,
     },
     /// used to pull oci images from a registry and verify binaries are signed
     Stage {
@@ -175,7 +182,6 @@ pub enum Commands {
             value_name = "skip-tls-verify",
             help = "If set will skip tls-verify and use http for the remote registry"
         )]
-        skip_tls_verify: bool,
         #[arg(
             short,
             long,
@@ -207,13 +213,6 @@ pub enum Commands {
             long,
             value_name = "skip-tls-verify",
             help = "If set will skip tls-verify and use http for the remote registry"
-        )]
-        skip_tls_verify: bool,
-        #[arg(
-            short,
-            long,
-            value_name = "node",
-            help = "Deploy to a specific node (hostname of server) or all servers"
         )]
         node: String,
         #[arg(short, long, value_name = "service", help = "The service to stop")]
@@ -408,7 +407,7 @@ pub struct Spec {
     pub services: Vec<Service>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Service {
     /// name must correspond to the actual binary that was created
     #[serde(rename = "name")]
@@ -439,7 +438,7 @@ pub struct Service {
     pub args: Option<Vec<KeyValue>>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct KeyValue {
     #[serde(rename = "name")]
     pub name: String,

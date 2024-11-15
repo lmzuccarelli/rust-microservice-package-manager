@@ -31,7 +31,12 @@ pub async fn start_client(log: &Logging, server_ip: String) -> Result<(), tokio_
                             // check if its a response
                             let api_response_result = serde_json::from_str::<APIResponse>(&json_data);
                             if api_response_result.is_ok() {
-                                log.info(&format!("response {:?}",api_response_result.unwrap()));
+                                let res  = api_response_result.unwrap();
+                                if res.status == "KO" {
+                                    log.error(&format!("{}",res.text));
+                                } else {
+                                    log.info(&format!("{}",res.text));
+                                }
                             } else {
                                 // if its not ok try the APIParameters
                                 let api_params: APIParameters = serde_json::from_str(&json_data).unwrap();
@@ -57,11 +62,6 @@ pub async fn start_client(log: &Logging, server_ip: String) -> Result<(), tokio_
                                             } else {
                                                 message.text = format!("package completed successfully");
                                             }
-                                        } else {
-                                            message.status = "KO".to_string();
-                                            message.text = format!("hostname {} does not match node {} parameter",
-                                                gethostname().to_string_lossy().to_string(),
-                                                api_params.node);
                                         }
                                     },
                                     "stage" => {
@@ -94,6 +94,40 @@ pub async fn start_client(log: &Logging, server_ip: String) -> Result<(), tokio_
                                             message.service = "list".to_string();
                                             message.node = gethostname().to_string_lossy().to_string();
                                             message.text = res.unwrap();
+                                        }
+                                    },
+                                    "start" => {
+                                        let res = handler::start(
+                                            log,
+                                            api_params.service.clone(),
+                                            api_params.working_dir,
+                                            api_params.config_file,
+                                        )
+                                        .await;
+                                        if res.is_err() {
+                                            message.status = "KO".to_string();
+                                            message.text = format!("{}",res.err().unwrap().to_string().to_lowercase());
+                                        } else {
+                                            message.status = "OK".to_string();
+                                            message.service = api_params.service.to_string();
+                                            message.node = gethostname().to_string_lossy().to_string();
+                                            message.text = "started".to_string();
+                                        }
+                                    },
+                                    "stop" => {
+                                        let res = handler::stop(
+                                            log,
+                                            api_params.service.clone(),
+                                        )
+                                        .await;
+                                        if res.is_err() {
+                                            message.status = "KO".to_string();
+                                            message.text = format!("stop service error {}",res.err().unwrap().to_string().to_lowercase());
+                                        } else {
+                                            message.status = "OK".to_string();
+                                            message.service = api_params.service.to_string();
+                                            message.node = gethostname().to_string_lossy().to_string();
+                                            message.text = "stopped".to_string();
                                         }
                                     },
                                     &_ => {

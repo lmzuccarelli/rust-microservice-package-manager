@@ -5,12 +5,11 @@ spec:
     - name: convey
       binaryPath: /home/lzuccarelli/Projects/convey/target/release
       registry: "mac-fedora:8443/init/mcon-paas/convey:v0.1.0"
-      #registry: "192.168.1.27:5000/init/mcon-paas/convey:v0.1.0"
       version: 0.1.0
       authors: 
         - lmzuccarelli luzuccar@redhat.com
         - mtroisi hello@marcotroisi.com
-      description: "Simple demo of a microservice binary to signed package"
+      description: "Simple demo of a microservice binary to oci fomatted signed package"
       env:
         - name: LOG_LEVEL
           value: TRACE
@@ -20,10 +19,9 @@ spec:
     - name: hypertls-microservice
       binaryPath: /home/lzuccarelli/Projects/rust-hypertls-microservice/target/release
       registry: "mac-fedora:8443/init/mcon-paas/hyerpertls-microservice:v0.1.0"
-      #registry: "192.168.1.27:5000/init/mcon-paas/hypertls-microservice:v0.1.0"
       version: 0.1.0
       authors: 
         - lmzuccarelli luzuccar@redhat.com
         - mtroisi hello@marcotroisi.com
-      description: "Simple demo of a microservice binary to signed package"
+      description: "Simple demo of a microservice binary to oci formatted signed package"
 

@@ -22,3 +22,14 @@ pub fn parse_yaml_config(data: String) -> Result<MicroserviceConfig, MirrorError
     let root: MicroserviceConfig = res.unwrap();
     Ok(root)
 }
+
+// get a specific service
+pub fn get_service(service: String, config: MicroserviceConfig) -> Service {
+    let index = config
+        .spec
+        .services
+        .iter()
+        .position(|r| r.name == service)
+        .unwrap();
+    return config.spec.services[index].clone();
+}

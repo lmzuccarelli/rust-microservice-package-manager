@@ -9,6 +9,7 @@ use mirror_error::MirrorError;
 use std::process;
 
 mod api;
+mod command;
 mod config;
 mod package;
 mod websocket;
@@ -63,10 +64,11 @@ async fn main() -> Result<(), MirrorError> {
                 config_file,
                 working_dir,
                 skip_tls_verify,
+                node,
             }) => {
                 let api_params = APIParameters {
                     command: "package".to_string(),
-                    node: "local".to_string(),
+                    node: node.to_string(),
                     service: "all".to_string(),
                     config_file: config_file.clone(),
                     working_dir: working_dir.clone(),
@@ -167,7 +169,6 @@ async fn main() -> Result<(), MirrorError> {
                 service,
                 config_file,
                 working_dir,
-                skip_tls_verify,
             }) => {
                 let api_params = APIParameters {
                     command: "start".to_string(),
@@ -175,8 +176,8 @@ async fn main() -> Result<(), MirrorError> {
                     service: service.clone(),
                     config_file: config_file.clone(),
                     working_dir: working_dir.clone(),
-                    from_registry: true,
-                    skip_tls_verify: *skip_tls_verify,
+                    from_registry: false,
+                    skip_tls_verify: true,
                 };
                 let message = serde_json::to_string(&api_params).unwrap();
                 let res = send_message(log, message, server_ip).await;
@@ -194,7 +195,6 @@ async fn main() -> Result<(), MirrorError> {
                 service,
                 config_file,
                 working_dir,
-                skip_tls_verify,
             }) => {
                 let api_params = APIParameters {
                     command: "stop".to_string(),
@@ -202,8 +202,8 @@ async fn main() -> Result<(), MirrorError> {
                     service: service.clone(),
                     config_file: config_file.clone(),
                     working_dir: working_dir.clone(),
-                    from_registry: true,
-                    skip_tls_verify: *skip_tls_verify,
+                    from_registry: false,
+                    skip_tls_verify: true,
                 };
                 let message = serde_json::to_string(&api_params).unwrap();
                 let res = send_message(log, message, server_ip).await;
