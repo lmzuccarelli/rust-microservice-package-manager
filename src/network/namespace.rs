@@ -4,12 +4,24 @@ use rand::{
     distr::{Alphanumeric, SampleString},
     rng,
 };
-use rtnetlink::{new_connection, AddressHandle, Handle, LinkBridge, LinkUnspec, LinkVeth};
+use rtnetlink::{
+    new_connection, AddressHandle, Handle, LinkBridge, LinkUnspec, LinkVeth, NetworkNamespace,
+};
 use std::net::Ipv4Addr;
 use std::str::FromStr;
+use std::{fs::File, os::fd::IntoRawFd};
 
 fn random_suffix(len: usize) -> String {
     Alphanumeric.sample_string(&mut rng(), len)
+}
+
+pub async fn add_netns(name: String) -> Result<(), MirrorError> {
+    // add netork namespace
+    NetworkNamespace::add(name)
+        .await
+        .map_err(|e| MirrorError::new(format!("failed to add network namespace {}", e)))?;
+
+    Ok(())
 }
 
 pub async fn get_bridge_idx(handle: &Handle, bridge_name: String) -> Result<u32, MirrorError> {
@@ -157,16 +169,18 @@ pub async fn create_veth_pair(bridge_idx: u32) -> Result<(u32, u32), MirrorError
     Ok((veth_idx, veth_peer_idx))
 }
 
-pub async fn join_veth_to_ns(veth_idx: u32, pid: u32) -> Result<(), MirrorError> {
+pub async fn join_veth_to_ns(veth_idx: u32, name: String) -> Result<(), MirrorError> {
     let (connection, handle, _) = new_connection().unwrap();
     tokio::spawn(connection);
+
+    let fd = File::open(format!("/var/run/netns/{}", name)).unwrap();
 
     // set veth to the process network namespace
     handle
         .link()
         .set(
             LinkUnspec::new_with_index(veth_idx)
-                .setns_by_pid(pid)
+                .setns_by_fd(fd.into_raw_fd())
                 .build(),
         )
         .execute()
@@ -174,7 +188,7 @@ pub async fn join_veth_to_ns(veth_idx: u32, pid: u32) -> Result<(), MirrorError>
         .map_err(|e| {
             MirrorError::new(format!(
                 "set veth with idx {} to process with pid {} failed: {}",
-                veth_idx, pid, e
+                veth_idx, name, e
             ))
         })?;
 
