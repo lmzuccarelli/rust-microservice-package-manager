@@ -27,8 +27,8 @@ pub async fn create_signed_artifact(name: String, path: String) -> Result<(), Mi
         ));
         return Err(err);
     }
-    let mut binary = res_binary.unwrap();
-    tar_file.append_file(name.clone(), &mut binary).unwrap();
+    //let mut binary = res_binary.unwrap();
+    tar_file.append_dir_all(".", path.clone()).unwrap();
     tar_file.into_inner().unwrap().finish().unwrap();
 
     let mut file = std::fs::File::open(tar_gz_file.clone()).unwrap();
@@ -66,7 +66,7 @@ pub async fn create_oci_manifest(
     ms_size: usize,
 ) -> Result<(), MirrorError> {
     // create the referenced image manifest
-    let cfg = fs_handler("templates/config.json".to_string(), "read", None).await?;
+    let cfg = fs_handler("templates/config-simple.json".to_string(), "read", None).await?;
     let hash = digest(cfg.as_bytes());
     let cfg_layer = Layer {
         media_type: "application/vnd.oci.image.config.v1+json".to_string(),
@@ -88,6 +88,7 @@ pub async fn create_oci_manifest(
         architecture: "amd64".to_string(),
         os: "linux".to_string(),
     };
+
     let manifest = Manifest {
         schema_version: Some(2),
         artifact_type: None,
@@ -106,13 +107,13 @@ pub async fn create_oci_manifest(
     fs_handler(manifest_blob_json, "write", Some(manifest_json.clone())).await?;
 
     // create oci index first
-    let layer = Layer {
+    let index = Layer {
         media_type: "application/vnd.oci.image.manifest.v1+json".to_string(),
         digest: format!("sha256:{}", hash_json),
         size: manifest_json.len() as i64,
         annotations: None,
     };
-    let vec_manifests = vec![layer];
+    let vec_manifests = vec![index];
     let index = OCIIndex {
         schema_version: 2,
         manifests: vec_manifests.clone(),

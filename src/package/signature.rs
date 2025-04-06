@@ -116,7 +116,7 @@ pub async fn verify_artifact(name: String, file: String) -> Result<bool, MirrorE
     let res_r = tgz_file.read_to_end(&mut tar_buf);
     if res_r.is_err() {
         let err = MirrorError::new(&format!(
-            "signing file {}",
+            "verify artifact {}",
             res_r.err().unwrap().to_string().to_lowercase()
         ));
         return Err(err);

@@ -6,12 +6,17 @@ use crate::websocket::server::*;
 use clap::Parser;
 use custom_logger::*;
 use mirror_error::MirrorError;
+use remote::process::{remote_execute, remote_upload};
 use std::process;
+use workflow::handler;
 
 mod api;
 mod command;
+mod common;
 mod config;
+mod network;
 mod package;
+mod remote;
 mod websocket;
 mod workflow;
 
@@ -20,15 +25,16 @@ async fn main() -> Result<(), MirrorError> {
     let args = Cli::parse();
 
     let lvl = args.loglevel.as_ref().unwrap();
-
     let l = match lvl.as_str() {
-        "info" => Level::INFO,
-        "debug" => Level::DEBUG,
-        "trace" => Level::TRACE,
-        _ => Level::INFO,
+        "info" => LevelFilter::Info,
+        "debug" => LevelFilter::Debug,
+        "trace" => LevelFilter::Trace,
+        _ => LevelFilter::Info,
     };
+    let log = Logging::new().with_level(l);
+    log.init().expect("log should initialize");
+
     let mode: &str;
-    let log = &Logging { log_level: l };
     if args.mode.is_none() {
         mode = "none";
     } else {
@@ -40,22 +46,19 @@ async fn main() -> Result<(), MirrorError> {
     };
     match mode {
         "worker" => {
-            let res = start_client(log, server_ip).await;
+            let res = start_client(server_ip).await;
             if res.is_err() {
-                log.error(&format!(
-                    "worker {}",
-                    res.err().unwrap().to_string().to_lowercase(),
-                ));
+                error!("worker {}", res.err().unwrap().to_string().to_lowercase(),);
                 process::exit(1);
             }
         }
         "controller" => {
-            let res = start_server(log, server_ip).await;
+            let res = start_server(server_ip).await;
             if res.is_err() {
-                log.error(&format!(
+                error!(
                     "controller {}",
                     res.err().unwrap().to_string().to_lowercase(),
-                ));
+                );
                 process::exit(1);
             }
         }
@@ -64,26 +67,11 @@ async fn main() -> Result<(), MirrorError> {
                 config_file,
                 working_dir,
                 skip_tls_verify,
-                node,
             }) => {
-                let api_params = APIParameters {
-                    command: "package".to_string(),
-                    node: node.to_string(),
-                    service: "all".to_string(),
-                    config_file: config_file.clone(),
-                    working_dir: working_dir.clone(),
-                    from_registry: true,
-                    skip_tls_verify: *skip_tls_verify,
-                };
-                let message = serde_json::to_string(&api_params).unwrap();
-                let res = send_message(log, message, server_ip).await;
+                let res = handler::package(working_dir, config_file, skip_tls_verify).await;
                 if res.is_err() {
-                    log.error(&format!(
-                        "package {}",
-                        res.err().unwrap().to_string().to_lowercase(),
-                    ));
-                } else {
-                    log.info("package message sent")
+                    error!("package {}", res.err().unwrap().to_string().to_lowercase());
+                    process::exit(1);
                 }
             }
             Some(Commands::Stage {
@@ -97,20 +85,22 @@ async fn main() -> Result<(), MirrorError> {
                     command: "stage".to_string(),
                     node: node.clone(),
                     service: "all".to_string(),
-                    config_file: config_file.clone(),
-                    working_dir: working_dir.clone(),
-                    from_registry: *from_registry,
-                    skip_tls_verify: *skip_tls_verify,
+                    config_file: Some(config_file.clone()),
+                    working_dir: Some(working_dir.clone()),
+                    from_registry: Some(*from_registry),
+                    skip_tls_verify: Some(*skip_tls_verify),
+                    ip: None,
+                    subnet: None,
                 };
                 let message = serde_json::to_string(&api_params).unwrap();
-                let res = send_message(log, message, server_ip).await;
+                let res = send_message(message, server_ip).await;
                 if res.is_err() {
-                    log.error(&format!(
+                    error!(
                         "send message {}",
                         res.err().unwrap().to_string().to_lowercase()
-                    ));
+                    );
                 } else {
-                    log.info("stage message sent")
+                    info!("stage message sent")
                 }
             }
             Some(Commands::CreateReferralManifest {
@@ -127,41 +117,41 @@ async fn main() -> Result<(), MirrorError> {
                 )
                 .await;
                 if res.is_err() {
-                    log.error(&format!(
+                    error!(
                         "{}",
                         res.as_ref().err().unwrap().to_string().to_ascii_lowercase()
-                    ));
+                    );
                 } else {
-                    log.info(&format!("created signed manifest for {}", name));
+                    info!("created signed manifest for {}", name);
                 }
             }
             Some(Commands::Keypair {}) => {
                 create_keypair().await?;
-                log.ex("keypair successfully created")
+                info!("keypair successfully created")
             }
             Some(Commands::Sign { artifact }) => {
                 let name = artifact.split("/").last().unwrap();
                 let res = sign_artifact(name.to_string(), artifact.to_string()).await;
                 if res.is_err() {
-                    log.error(&format!(
+                    error!(
                         "{:#?}",
                         res.err().as_ref().unwrap().to_string().to_lowercase()
-                    ));
+                    );
                 }
-                log.info(&format!("artifact {} successfully signed", name));
+                info!("artifact {} successfully signed", name);
             }
             Some(Commands::Verify { artifact }) => {
                 let name = artifact.split("/").last().unwrap();
                 let res = verify_artifact(name.to_string(), artifact.to_string()).await;
                 if res.is_err() {
-                    log.error(&format!(
+                    error!(
                         "{:#?}",
                         res.as_ref().err().unwrap().to_string().to_lowercase()
-                    ));
+                    );
                 }
                 match res.as_ref().unwrap() {
-                    true => log.info(&format!("artifact {} is trusted", name)),
-                    false => log.warn(&format!("artitact {} is not trusted", name)),
+                    true => info!("artifact {} is trusted", name),
+                    false => warn!("artitact {} is not trusted", name),
                 }
             }
             Some(Commands::Start {
@@ -174,20 +164,22 @@ async fn main() -> Result<(), MirrorError> {
                     command: "start".to_string(),
                     node: node.clone(),
                     service: service.clone(),
-                    config_file: config_file.clone(),
-                    working_dir: working_dir.clone(),
-                    from_registry: false,
-                    skip_tls_verify: true,
+                    config_file: Some(config_file.clone()),
+                    working_dir: Some(working_dir.clone()),
+                    from_registry: Some(false),
+                    skip_tls_verify: Some(true),
+                    ip: None,
+                    subnet: None,
                 };
                 let message = serde_json::to_string(&api_params).unwrap();
-                let res = send_message(log, message, server_ip).await;
+                let res = send_message(message, server_ip).await;
                 if res.is_err() {
-                    log.error(&format!(
+                    error!(
                         "send message {}",
                         res.err().unwrap().to_string().to_lowercase()
-                    ));
+                    );
                 } else {
-                    log.info("start message sent");
+                    info!("start message sent");
                 }
             }
             Some(Commands::Stop {
@@ -200,20 +192,22 @@ async fn main() -> Result<(), MirrorError> {
                     command: "stop".to_string(),
                     node: node.clone(),
                     service: service.clone(),
-                    config_file: config_file.clone(),
-                    working_dir: working_dir.clone(),
-                    from_registry: false,
-                    skip_tls_verify: true,
+                    config_file: Some(config_file.clone()),
+                    working_dir: Some(working_dir.clone()),
+                    from_registry: Some(false),
+                    skip_tls_verify: Some(true),
+                    ip: None,
+                    subnet: None,
                 };
                 let message = serde_json::to_string(&api_params).unwrap();
-                let res = send_message(log, message, server_ip).await;
+                let res = send_message(message, server_ip).await;
                 if res.is_err() {
-                    log.error(&format!(
+                    error!(
                         "send message {}",
                         res.err().unwrap().to_string().to_lowercase()
-                    ));
+                    );
                 } else {
-                    log.info("stop message sent");
+                    info!("stop message sent");
                 }
             }
             Some(Commands::List {}) => {
@@ -221,24 +215,61 @@ async fn main() -> Result<(), MirrorError> {
                     command: "list".to_string(),
                     node: "all".to_string(),
                     service: "".to_string(),
-                    config_file: "".to_string(),
-                    working_dir: "".to_string(),
-                    from_registry: true,
-                    skip_tls_verify: true,
+                    config_file: Some("".to_string()),
+                    working_dir: Some("".to_string()),
+                    from_registry: Some(true),
+                    skip_tls_verify: Some(true),
+                    ip: None,
+                    subnet: None,
                 };
                 let message = serde_json::to_string(&api_params).unwrap();
-                let res = send_message(log, message, server_ip).await;
+                let res = send_message(message, server_ip).await;
                 if res.is_err() {
-                    log.error(&format!(
+                    error!(
                         "send message {}",
                         res.err().unwrap().to_string().to_lowercase()
-                    ));
+                    );
                 } else {
-                    log.info("list message sent");
+                    info!("list message sent");
                 }
             }
+            Some(Commands::RemoteExecute { node }) => {
+                remote_execute(node.clone());
+            }
+            Some(Commands::RemoteUpload { node, file }) => {
+                remote_upload(node.clone(), file.clone()).await;
+            }
+            Some(Commands::CreateBridge {
+                node,
+                name,
+                ip,
+                subnet,
+            }) => {
+                let api_params = APIParameters {
+                    command: "create_bridge".to_string(),
+                    node: node.to_string(),
+                    service: name.to_string(),
+                    config_file: None,
+                    working_dir: None,
+                    from_registry: None,
+                    skip_tls_verify: None,
+                    ip: Some(ip.to_string()),
+                    subnet: Some(*subnet),
+                };
+                let message = serde_json::to_string(&api_params).unwrap();
+                let res = send_message(message, server_ip).await;
+                if res.is_err() {
+                    error!(
+                        "send message {}",
+                        res.err().unwrap().to_string().to_lowercase()
+                    );
+                } else {
+                    info!("list message sent");
+                }
+            }
+
             None => {
-                log.error("sub command not recognized, use --help to get list of cli options");
+                error!("sub command not recognized, use --help to get list of cli options");
                 process::exit(1);
             }
         },

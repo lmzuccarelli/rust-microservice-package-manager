@@ -66,13 +66,13 @@ pub enum Commands {
             help = "If set will skip tls-verify and use http for the remote registry"
         )]
         skip_tls_verify: bool,
-        #[arg(
-            short,
-            long,
-            value_name = "node",
-            help = "Package artifacts on a specific node (must be a registered client)"
-        )]
-        node: String,
+        //#[arg(
+        //    short,
+        //    long,
+        //    value_name = "node",
+        //    help = "Package artifacts on a specific node (must be a registered client)"
+        //)]
+        //node: String,
     },
     /// used to pull oci images from a registry and verify binaries are signed
     Stage {
@@ -211,8 +211,8 @@ pub enum Commands {
         #[arg(
             short,
             long,
-            value_name = "skip-tls-verify",
-            help = "If set will skip tls-verify and use http for the remote registry"
+            value_name = "node",
+            help = "Deploy to a specific node (hostname of server) or all servers"
         )]
         node: String,
         #[arg(short, long, value_name = "service", help = "The service to stop")]
@@ -220,6 +220,49 @@ pub enum Commands {
     },
     /// List all current registered nodes
     List {},
+    /// RemoteExecute
+    RemoteExecute {
+        #[arg(
+            short,
+            long,
+            value_name = "node",
+            help = "Deploy to a specific node (hostname of server) or all servers"
+        )]
+        node: String,
+    },
+    /// RemoteUpload
+    RemoteUpload {
+        #[arg(
+            short,
+            long,
+            value_name = "node",
+            help = "Deploy to a specific node (hostname of server) or all servers"
+        )]
+        node: String,
+        #[arg(
+            short,
+            long,
+            value_name = "file",
+            help = "File to upload to remote server"
+        )]
+        file: String,
+    },
+    /// CreateBridge
+    CreateBridge {
+        #[arg(
+            short,
+            long,
+            value_name = "node",
+            help = "Create a network bridge on a specific node (hostname of server) or all servers"
+        )]
+        node: String,
+        #[arg(short, long, value_name = "name", help = "Bridge name (required)")]
+        name: String,
+        #[arg(short, long, value_name = "ip", help = "Bridge ip (required)")]
+        ip: String,
+        #[arg(short, long, value_name = "subnet", help = "Bridge subnet (required)")]
+        subnet: u8,
+    },
 }
 
 #[derive(Serialize, Deserialize)]
@@ -447,6 +490,15 @@ pub struct KeyValue {
     pub value: String,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Artifact {
+    #[serde(rename = "name")]
+    pub name: String,
+
+    #[serde(rename = "artifactType")]
+    pub artitact_type: String,
+}
+
 #[allow(unused)]
 #[derive(Debug, Clone)]
 pub enum Imageformat {
@@ -466,16 +518,22 @@ pub struct APIParameters {
     pub service: String,
 
     #[serde(rename = "configFile")]
-    pub config_file: String,
+    pub config_file: Option<String>,
 
     #[serde(rename = "workingDir")]
-    pub working_dir: String,
+    pub working_dir: Option<String>,
 
     #[serde(rename = "fromRegistry")]
-    pub from_registry: bool,
+    pub from_registry: Option<bool>,
 
     #[serde(rename = "skipTlsVerify")]
-    pub skip_tls_verify: bool,
+    pub skip_tls_verify: Option<bool>,
+
+    #[serde(rename = "ip")]
+    pub ip: Option<String>,
+
+    #[serde(rename = "subnet")]
+    pub subnet: Option<u8>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

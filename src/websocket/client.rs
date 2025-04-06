@@ -10,7 +10,7 @@ use http::Uri;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio_websockets::{ClientBuilder, Message};
 
-pub async fn start_client(log: &Logging, server_ip: String) -> Result<(), tokio_websockets::Error> {
+pub async fn start_client(server_ip: String) -> Result<(), tokio_websockets::Error> {
     let address = &format!("ws://{}:2000", server_ip);
     let (mut ws_stream, _) = ClientBuilder::from_uri(Uri::from_str(address).unwrap())
         .connect()
@@ -18,6 +18,7 @@ pub async fn start_client(log: &Logging, server_ip: String) -> Result<(), tokio_
 
     let stdin = tokio::io::stdin();
     let mut stdin = BufReader::new(stdin).lines();
+    info!("starting worker : {}", address);
 
     // Continuous loop for concurrently sending and receiving messages.
     loop {
@@ -33,9 +34,9 @@ pub async fn start_client(log: &Logging, server_ip: String) -> Result<(), tokio_
                             if api_response_result.is_ok() {
                                 let res  = api_response_result.unwrap();
                                 if res.status == "KO" {
-                                    log.error(&format!("{}",res.text));
+                                    error!("{}",res.text);
                                 } else {
-                                    log.info(&format!("{}",res.text));
+                                    info!("{}",res.text);
                                 }
                             } else {
                                 // if its not ok try the APIParameters
@@ -50,10 +51,9 @@ pub async fn start_client(log: &Logging, server_ip: String) -> Result<(), tokio_
                                     "package" => {
                                         if api_params.node == gethostname().to_string_lossy().to_string() {
                                             let res = handler::package(
-                                                log,
-                                                api_params.working_dir,
-                                                api_params.config_file,
-                                                api_params.skip_tls_verify,
+                                                &api_params.working_dir.unwrap(),
+                                                &api_params.config_file.unwrap(),
+                                                &api_params.skip_tls_verify.unwrap(),
                                             )
                                             .await;
                                             if res.is_err() {
@@ -66,11 +66,10 @@ pub async fn start_client(log: &Logging, server_ip: String) -> Result<(), tokio_
                                     },
                                     "stage" => {
                                         let res = handler::stage(
-                                            log,
-                                            api_params.from_registry,
-                                            api_params.working_dir,
-                                            api_params.config_file,
-                                            api_params.skip_tls_verify,
+                                            api_params.from_registry.unwrap(),
+                                            api_params.working_dir.unwrap(),
+                                            api_params.config_file.unwrap(),
+                                            api_params.skip_tls_verify.unwrap(),
                                         )
                                         .await;
                                         if res.is_err() {
@@ -78,12 +77,11 @@ pub async fn start_client(log: &Logging, server_ip: String) -> Result<(), tokio_
                                             message.text = format!("staging error {}",res.err().unwrap().to_string().to_lowercase());
                                         } else {
                                            message.status = "OK".to_string();
-                                           message.text = format!("staging completed successfully");
+                                           message.text = format!("from message server -> staging completed successfully");
                                         }
                                     },
                                     "list" => {
                                         let res = handler::list(
-                                            log,
                                         )
                                         .await;
                                         if res.is_err() {
@@ -98,10 +96,9 @@ pub async fn start_client(log: &Logging, server_ip: String) -> Result<(), tokio_
                                     },
                                     "start" => {
                                         let res = handler::start(
-                                            log,
                                             api_params.service.clone(),
-                                            api_params.working_dir,
-                                            api_params.config_file,
+                                            api_params.working_dir.unwrap(),
+                                            api_params.config_file.unwrap(),
                                         )
                                         .await;
                                         if res.is_err() {
@@ -111,23 +108,39 @@ pub async fn start_client(log: &Logging, server_ip: String) -> Result<(), tokio_
                                             message.status = "OK".to_string();
                                             message.service = api_params.service.to_string();
                                             message.node = gethostname().to_string_lossy().to_string();
-                                            message.text = "started".to_string();
+                                            message.text = "from message server -> started".to_string();
                                         }
                                     },
                                     "stop" => {
                                         let res = handler::stop(
-                                            log,
                                             api_params.service.clone(),
                                         )
                                         .await;
                                         if res.is_err() {
                                             message.status = "KO".to_string();
-                                            message.text = format!("stop service error {}",res.err().unwrap().to_string().to_lowercase());
+                                            message.text = format!("from message server -> stop service error {}",res.err().unwrap().to_string().to_lowercase());
                                         } else {
                                             message.status = "OK".to_string();
                                             message.service = api_params.service.to_string();
                                             message.node = gethostname().to_string_lossy().to_string();
-                                            message.text = "stopped".to_string();
+                                            message.text = "from message server -> stopped".to_string();
+                                        }
+                                    },
+                                    "create_bridge" => {
+                                        let res = handler::bridge(
+                                            api_params.service.clone(),
+                                            api_params.ip.unwrap(),
+                                            api_params.subnet.unwrap(),
+                                        )
+                                        .await;
+                                        if res.is_err() {
+                                            message.status = "KO".to_string();
+                                            message.text = format!("from message server -> create_bridge error {}",res.err().unwrap().to_string().to_lowercase());
+                                        } else {
+                                            message.status = "OK".to_string();
+                                            message.service = api_params.service.to_string();
+                                            message.node = gethostname().to_string_lossy().to_string();
+                                            message.text = "from message server -> created_bridge successful".to_string();
                                         }
                                     },
                                     &_ => {
@@ -156,7 +169,6 @@ pub async fn start_client(log: &Logging, server_ip: String) -> Result<(), tokio_
 }
 
 pub async fn send_message(
-    log: &Logging,
     message: String,
     server_ip: String,
 ) -> Result<(), tokio_websockets::Error> {
@@ -171,7 +183,7 @@ pub async fn send_message(
             match incoming {
                 Some(Ok(msg)) => {
                     if let Some(text) = msg.as_text() {
-                        log.debug(&format!("from server: {}", text));
+                        debug!("from server: {}", text);
                     }
                 }
                 Some(Err(err)) => return Err(err.into()),

@@ -1,0 +1,13 @@
+apiVersion: microservices.application.io/v1alpha1
+kind: MicroserviceConfig
+spec:
+  services:
+    - name: hypertls-microservice
+      binaryPath: /home/lzuccarelli/Projects/microservices
+      registry: "192.168.1.27:5000/init/mcon-paas/hyerpertls-microservice:v0.1.0"
+      version: 0.1.0
+      authors: 
+        - lmzuccarelli luzuccar@redhat.com
+        - mtroisi hello@marcotroisi.com
+      description: "Simple demo of a microservice binary to oci formatted signed package"
+

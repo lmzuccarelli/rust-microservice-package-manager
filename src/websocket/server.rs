@@ -1,4 +1,4 @@
-use custom_logger::Logging;
+use custom_logger::{debug, info};
 use futures_util::sink::SinkExt;
 use futures_util::stream::StreamExt;
 use std::error::Error;
@@ -32,17 +32,14 @@ async fn handle_connection(
     }
 }
 
-pub async fn start_server(
-    log: &Logging,
-    server_ip: String,
-) -> Result<(), Box<dyn Error + Send + Sync>> {
+pub async fn start_server(server_ip: String) -> Result<(), Box<dyn Error + Send + Sync>> {
     let (bcast_tx, _) = channel(16);
     let address = &format!("{}:2000", server_ip);
     let listener = TcpListener::bind(address.clone()).await?;
-    log.info(&format!("listening on (address and port) : {}", address));
+    info!("listening on (address and port) : {}", address);
     loop {
         let (socket, addr) = listener.accept().await?;
-        log.debug(&format!("new connection from {addr:?}"));
+        debug!("new connection from {addr:?}");
         let bcast_tx = bcast_tx.clone();
         tokio::spawn(async move {
             // Wrap the raw TCP stream into a websocket.

@@ -15,7 +15,8 @@ cat tarball.tar.gz digest >> tarball.tar.gz.signed
 
 Now you can distribute one file which has an embedded public/private key signature! :)
 
-If you receive a concatenated input file plus digest, you will need to first extract the digest portion to a file on its own and then remove the digest from the original file. This can be done using dd:
+If you receive a concatenated input file plus digest, you will need to first extract the digest portion to a file on its own and then remove 
+the digest from the original file. This can be done using dd:
 
 SIZE=$(stat -c%s tarball.tar.gz.signed)
 dd if=tarball.tar.gz.signed of=digest bs=1 skip=$((SIZE-256))
